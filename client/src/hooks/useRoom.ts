@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { socket } from '../socket.js';
 import { useRoomStore } from '../store/room.js';
+import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
 
 interface RoomCreateResponse {
   code?: string;
@@ -19,6 +20,7 @@ interface RoomJoinResponse {
   roomId?: string;
   title?: string;
   participants?: Array<Record<string, unknown>>;
+  canvasObjects?: Array<Record<string, unknown>>;
 }
 
 interface RoomLeaveResponse {
@@ -83,6 +85,7 @@ export function useCreateRoom() {
 export function useJoinRoom() {
   const setRoom = useRoomStore(useShallow((s) => s.setRoom));
   const setParticipants = useRoomStore(useShallow((s) => s.setParticipants));
+  const setObjects = useCanvasObjectsStore(useShallow((s) => s.setObjects));
 
   const joinRoom = useCallback(
     async (roomId?: string, shareCode?: string): Promise<void> => {
@@ -107,11 +110,16 @@ export function useJoinRoom() {
             lastSeenAt: p.lastSeenAt as string,
             isActive: p.isActive as boolean,
           })));
+
+          // Set initial canvas objects from server
+          const canvasObjects = (response.canvasObjects || []) as Array<Record<string, unknown>>;
+          setObjects(canvasObjects as unknown as CanvasObject[]);
+
           resolve();
         });
       });
     },
-    [setRoom, setParticipants]
+    [setRoom, setParticipants, setObjects]
   );
 
   return joinRoom;
@@ -120,6 +128,7 @@ export function useJoinRoom() {
 // Hook to leave the current room.
 export function useLeaveRoom() {
   const clearRoom = useRoomStore(useShallow((s) => s.clearRoom));
+  const clearObjects = useCanvasObjectsStore(useShallow((s) => s.clear));
 
   const leaveRoom = useCallback(async (): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -129,10 +138,11 @@ export function useLeaveRoom() {
           return;
         }
         clearRoom();
+        clearObjects();
         resolve();
       });
     });
-  }, [clearRoom]);
+  }, [clearRoom, clearObjects]);
 
   return leaveRoom;
 }

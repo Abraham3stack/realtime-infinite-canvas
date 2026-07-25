@@ -27,6 +27,9 @@ export interface CanvasObjectsState {
   deleteObject: (id: string) => void;
   getObject: (id: string) => CanvasObject | undefined;
   
+  // Set all objects (for sync from server)
+  setObjects: (objects: CanvasObject[]) => void;
+
   // Clear all objects (for testing/reset)
   clear: () => void;
 }
@@ -113,6 +116,15 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
 
   getObject: (id) => {
     return get().objects.find((obj) => obj.id === id);
+  },
+
+  setObjects: (objects) => {
+    // When receiving objects from server, calculate the highest z-index
+    const maxZIndex = objects.reduce((max, obj) => Math.max(max, obj.zIndex), 0);
+    set({
+      objects,
+      nextZIndex: maxZIndex + 1,
+    });
   },
 
   clear: () => {

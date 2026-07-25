@@ -760,6 +760,144 @@ Current structure is designed to support Socket.IO sync in M1.E.3 with minimal r
 
 ---
 
+## Phase Status: M1.E.3 - Realtime Object Synchronization (Slice 3)
+
+**Status**: ✅ COMPLETE
+
+### ✅ Completed
+
+- Added server-side in-memory object store (`roomObjects` Map per room)
+  - `initializeRoomObjects(roomId)` — called on room create
+  - `getRoomObjects(roomId)` — called on room join (state snapshot)
+  - `clearRoomObjects(roomId)` — cleanup hook for future room deletion
+- Created `server/src/socket/handlers/objects.ts` with three event handlers:
+  - `object:create` — validates room membership, stores object, broadcasts to room
+  - `object:update` — validates room, applies partial update, broadcasts to room
+  - `object:delete` — validates room, removes object, broadcasts to room
+  - All handlers cast socket to `AuthenticatedSocket` and validate `authSocket.roomId`
+- Registered `registerObjectHandlers(io)` in `server/src/socket/index.ts`
+- Updated `server/src/socket/handlers/room.ts`:
+  - `room:create` calls `initializeRoomObjects(room.id)` after room is created
+  - `room:join` response includes `canvasObjects: getRoomObjects(room.id)` in state snapshot
+- Updated client `useRoom.ts` (`useJoinRoom`):
+  - Receives `canvasObjects` from join response
+  - Calls `setObjects(canvasObjects)` to hydrate store for late joiners
+  - Added `setObjects` to `useLeaveRoom` cleanup (calls `clear()`)
+- Updated `Canvas.tsx` to emit socket events for all object operations:
+  - **Create**: `socket.emit('object:create', { operationId, roomId, object })`
+  - **Move**: `socket.emit('object:update', { operationId, roomId, objectId, updates: {x,y} })`
+  - **Delete**: `socket.emit('object:delete', { operationId, roomId, objectId })`
+  - Each operation generates unique `operationId` for echo deduplication
+- Canvas.tsx listens for incoming sync events:
+  - `object:created` — adds object to store (skips if operationId matches own pending op)
+  - `object:updated` — applies partial update to store (skips own ops)
+  - `object:deleted` — removes object from store (skips own ops)
+  - Deduplication via `pendingOperations` Set (ref, no re-renders)
+- Fixed CORS bug in `server/src/index.ts` — dev mode now allows ports 5173-5176
+- Fixed data bug in `objects.ts` — `socket.data.currentRoom` → `authSocket.roomId`
+
+### ✅ Socket Events Added
+
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `object:create` | Client → Server | `{ operationId, roomId, object }` | Create new canvas object |
+| `object:created` | Server → All clients | `{ operationId, object, serverTs }` | Broadcast created object |
+| `object:update` | Client → Server | `{ operationId, roomId, objectId, updates }` | Move/modify object |
+| `object:updated` | Server → All clients | `{ operationId, objectId, updates, serverTs }` | Broadcast object update |
+| `object:delete` | Client → Server | `{ operationId, roomId, objectId }` | Delete an object |
+| `object:deleted` | Server → All clients | `{ operationId, objectId, serverTs }` | Broadcast deletion |
+
+### ✅ Synchronization Flow
+
+```
+Alice creates object:
+  1. Client adds to local Zustand store immediately (optimistic)
+  2. Client emits object:create with operationId
+  3. Server validates authSocket.roomId matches payload roomId
+  4. Server stores object in roomObjects Map
+  5. Server broadcasts object:created to all sockets in room
+  6. Alice receives echo → matches operationId → skips re-adding
+  7. Bob receives object:created → adds to local store
+
+New user joins room (late joiner):
+  1. Client emits room:join
+  2. Server fetches getRoomObjects(roomId) from in-memory store
+  3. Server returns canvasObjects in room:join response
+  4. Client calls setObjects(canvasObjects) in useJoinRoom hook
+  5. Joiner immediately sees all existing objects
+```
+
+### ⚠️ Remaining
+
+- Object state is in-memory only (lost on server restart)
+- Persistence to database (future milestone)
+- Conflict resolution beyond last-write-wins (future)
+- Image and audio objects (deferred)
+- Selection, resize, rotate (deferred)
+- Cursor tracking across clients (future)
+
+### 🚧 Known Issues
+
+- Socket UI shows "Disconnected" in sidebar (cosmetic bug from M1.D; socket actually connected and events working)
+- Multiple test participants from prior sessions accumulate in PARTICIPANTS list (Neon DB retains prior test sessions; doesn't affect functionality)
+- Object creation via keyboard shortcut focuses on viewport center only (not click-to-place)
+
+### 📌 Next Phase
+
+- M1.E.4 or future — Object persistence, conflict resolution, or cursor tracking
+
+### 🧪 Validation Results
+
+**Build & Quality Gates:**
+
+- ✅ `npm run typecheck` — 0 errors (all 3 packages)
+- ✅ `npm run lint` — 0 errors, 0 warnings
+- ✅ `npm run build` — All packages built successfully
+- ✅ No console errors in either browser window
+- ✅ No runtime errors or crashes
+
+**Two-Browser Realtime Validation (Alice + Bob, room QFKkFW):**
+
+- ✅ Alice creates session and room
+- ✅ Bob creates session and joins Alice's room (PARTICIPANTS: 2)
+- ✅ Alice presses R → rectangle created → Bob's canvas shows rectangle immediately
+- ✅ Alice presses C → circle created → Bob sees red circle
+- ✅ Alice presses T → text object created → Bob sees text
+- ✅ Alice presses S → sticky note created → Bob sees yellow note
+- ✅ Bob presses R → rectangle created → Alice's canvas shows Bob's rectangle
+- ✅ Object IDs stable: same IDs on both clients (generated client-side, stable in store)
+- ✅ No duplicate objects: deduplication via operationId prevents double-add on echo
+- ✅ Canvas pan/zoom preserved on both clients
+- ✅ Room lifecycle intact (join/leave/participants working)
+
+**Screenshots Captured:**
+- Alice's canvas after creating 4 objects (sticky note visible at edge)
+- Bob's canvas showing all 4 objects synced from Alice (sticky note + circle + text + rectangle)
+- Alice's canvas showing Bob's additional rectangle (sync confirmed bidirectional)
+
+### 📝 Files Changed
+
+**New Files:**
+- [server/src/socket/handlers/objects.ts](server/src/socket/handlers/objects.ts) — Object sync event handlers
+
+**Modified Files:**
+- [server/src/socket/index.ts](server/src/socket/index.ts) — Registered object handlers
+- [server/src/socket/handlers/room.ts](server/src/socket/handlers/room.ts) — initializeRoomObjects on create, getRoomObjects on join
+- [server/src/index.ts](server/src/index.ts) — CORS support for dev ports 5173-5176
+- [client/src/components/Canvas.tsx](client/src/components/Canvas.tsx) — Socket emit + listen for object events
+- [client/src/hooks/useRoom.ts](client/src/hooks/useRoom.ts) — setObjects on join, clear on leave
+- [client/src/store/objects.ts](client/src/store/objects.ts) — Added setObjects action for late-joiner hydration
+
+### 📝 Technical Debt
+
+- In-memory object state not persisted (server restart clears all objects)
+- No optimistic rollback if server rejects event (update is already applied locally)
+- Object event order not guaranteed under high concurrency (last-write-wins only)
+- No tombstone records for deletes (late joiners won't see deletions that happened before they joined)
+- Keyboard shortcut creates at viewport center only; click-to-create not implemented
+
+---
+
 ## Phase 2 - Infinite Canvas and Mandatory Object Types
 
 ### Goal

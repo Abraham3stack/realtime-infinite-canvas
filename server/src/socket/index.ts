@@ -1,6 +1,7 @@
 import type { Server } from 'socket.io';
 import { authMiddleware } from './middleware/auth.js';
 import { registerRoomHandlers } from './handlers/room.js';
+import { registerObjectHandlers } from './handlers/objects.js';
 
 export function registerSocketHandlers(io: Server): void {
   // Auth middleware: validates bearer token before allowing connection.
@@ -9,4 +10,7 @@ export function registerSocketHandlers(io: Server): void {
 
   // Register all room lifecycle handlers.
   registerRoomHandlers(io);
+
+  // Register all object synchronization handlers.
+  registerObjectHandlers(io);
 }

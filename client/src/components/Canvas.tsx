@@ -2,8 +2,30 @@ import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { Stage, Layer } from 'react-konva';
 import Konva from 'konva';
 import { useViewportStore } from '../store/viewport.js';
-import { useCanvasObjectsStore } from '../store/objects.js';
+import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
+import { useRoomStore } from '../store/room.js';
 import { ObjectRenderer } from './ObjectRenderer.js';
+import { socket } from '../socket.js';
+
+// Type definitions for socket payloads
+interface ObjectCreatedPayload {
+  operationId: string;
+  object: CanvasObject;
+  serverTs: Date;
+}
+
+interface ObjectUpdatedPayload {
+  operationId: string;
+  objectId: string;
+  updates: Record<string, unknown>;
+  serverTs: Date;
+}
+
+interface ObjectDeletedPayload {
+  operationId: string;
+  objectId: string;
+  serverTs: Date;
+}
 
 export const Canvas: React.FC = () => {
   const stageRef = useRef<Konva.Stage>(null);
@@ -26,12 +48,25 @@ export const Canvas: React.FC = () => {
     deleteObject: s.deleteObject,
   }));
 
+  // Get current room for socket events
+  const { room } = useRoomStore();
+
+  // Track pending operations for deduplication (operationId -> true means local)
+  const pendingOperations = useRef<Set<string>>(new Set());
+
+  // Generate unique operation ID for deduplication
+  const generateOperationId = useCallback(() => {
+    return `op_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  }, []);
+
   // Track mouse state for panning
   const isPanning = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
 
   // Keyboard shortcuts for object creation
   useEffect(() => {
+    if (!room) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note
       // Create object at center of current viewport
@@ -39,28 +74,130 @@ export const Canvas: React.FC = () => {
       const centerY = (stageSize.height / 2 - offsetY) / scale;
 
       switch (e.key.toLowerCase()) {
-        case 'r':
+        case 'r': {
           e.preventDefault();
-          addObject('rectangle', centerX, centerY);
+          const id = addObject('rectangle', centerX, centerY);
+          const obj = useCanvasObjectsStore.getState().getObject(id);
+          if (obj && room) {
+            const operationId = generateOperationId();
+            pendingOperations.current.add(operationId);
+            socket.emit('object:create', {
+              operationId,
+              roomId: room.id,
+              object: obj,
+            });
+          }
           break;
-        case 'c':
+        }
+        case 'c': {
           e.preventDefault();
-          addObject('circle', centerX, centerY);
+          const id = addObject('circle', centerX, centerY);
+          const obj = useCanvasObjectsStore.getState().getObject(id);
+          if (obj && room) {
+            const operationId = generateOperationId();
+            pendingOperations.current.add(operationId);
+            socket.emit('object:create', {
+              operationId,
+              roomId: room.id,
+              object: obj,
+            });
+          }
           break;
-        case 't':
+        }
+        case 't': {
           e.preventDefault();
-          addObject('text', centerX, centerY);
+          const id = addObject('text', centerX, centerY);
+          const obj = useCanvasObjectsStore.getState().getObject(id);
+          if (obj && room) {
+            const operationId = generateOperationId();
+            pendingOperations.current.add(operationId);
+            socket.emit('object:create', {
+              operationId,
+              roomId: room.id,
+              object: obj,
+            });
+          }
           break;
-        case 's':
+        }
+        case 's': {
           e.preventDefault();
-          addObject('sticky-note', centerX, centerY);
+          const id = addObject('sticky-note', centerX, centerY);
+          const obj = useCanvasObjectsStore.getState().getObject(id);
+          if (obj && room) {
+            const operationId = generateOperationId();
+            pendingOperations.current.add(operationId);
+            socket.emit('object:create', {
+              operationId,
+              roomId: room.id,
+              object: obj,
+            });
+          }
           break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [addObject, stageSize, offsetX, offsetY, scale]);
+  }, [addObject, stageSize, offsetX, offsetY, scale, room, generateOperationId]);
+
+  // Socket event listeners for object synchronization
+  useEffect(() => {
+    if (!room) return;
+
+    // Listen for object creation from other clients
+    const handleObjectCreated = (payload: ObjectCreatedPayload) => {
+      const { operationId, object } = payload;
+
+      // Skip if this is our own operation (echo)
+      if (pendingOperations.current.has(operationId)) {
+        pendingOperations.current.delete(operationId);
+        return;
+      }
+
+      // Add object to store without emitting (already on server)
+      const { objects } = useCanvasObjectsStore.getState();
+      if (!objects.find((o) => o.id === object.id)) {
+        useCanvasObjectsStore.getState().setObjects([...objects, object]);
+      }
+    };
+
+    // Listen for object updates from other clients
+    const handleObjectUpdated = (payload: ObjectUpdatedPayload) => {
+      const { operationId, objectId, updates } = payload;
+
+      // Skip if this is our own operation (echo)
+      if (pendingOperations.current.has(operationId)) {
+        pendingOperations.current.delete(operationId);
+        return;
+      }
+
+      updateObject(objectId, updates);
+    };
+
+    // Listen for object deletion from other clients
+    const handleObjectDeleted = (payload: ObjectDeletedPayload) => {
+      const { operationId, objectId } = payload;
+
+      // Skip if this is our own operation (echo)
+      if (pendingOperations.current.has(operationId)) {
+        pendingOperations.current.delete(operationId);
+        return;
+      }
+
+      deleteObject(objectId);
+    };
+
+    socket.on('object:created', handleObjectCreated);
+    socket.on('object:updated', handleObjectUpdated);
+    socket.on('object:deleted', handleObjectDeleted);
+
+    return () => {
+      socket.off('object:created', handleObjectCreated);
+      socket.off('object:updated', handleObjectUpdated);
+      socket.off('object:deleted', handleObjectDeleted);
+    };
+  }, [room, updateObject, deleteObject]);
 
   // Update stage size on mount and resize
   useEffect(() => {
@@ -147,8 +284,33 @@ export const Canvas: React.FC = () => {
           <ObjectRenderer
             key={obj.id}
             object={obj}
-            onMove={(x, y) => updateObject(obj.id, { x, y })}
-            onDelete={() => deleteObject(obj.id)}
+            onMove={(x, y) => {
+              updateObject(obj.id, { x, y });
+              // Emit socket event for movement
+              if (room) {
+                const operationId = generateOperationId();
+                pendingOperations.current.add(operationId);
+                socket.emit('object:update', {
+                  operationId,
+                  roomId: room.id,
+                  objectId: obj.id,
+                  updates: { x, y },
+                });
+              }
+            }}
+            onDelete={() => {
+              deleteObject(obj.id);
+              // Emit socket event for deletion
+              if (room) {
+                const operationId = generateOperationId();
+                pendingOperations.current.add(operationId);
+                socket.emit('object:delete', {
+                  operationId,
+                  roomId: room.id,
+                  objectId: obj.id,
+                });
+              }
+            }}
           />
         ))}
       </Layer>

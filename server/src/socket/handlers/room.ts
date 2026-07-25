@@ -3,6 +3,7 @@ import { customAlphabet } from 'nanoid';
 import { prisma } from '../../db/prisma.js';
 import { ErrorCodes } from '@realtime-canvas/shared';
 import type { AuthenticatedSocket } from '../types.js';
+import { initializeRoomObjects, getRoomObjects } from './objects.js';
 
 const generateShareCode = customAlphabet('23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz', 6);
 
@@ -17,6 +18,7 @@ interface RoomResponse {
   success?: boolean;
   title?: string;
   participants?: Array<Record<string, unknown>>;
+  canvasObjects?: Array<Record<string, unknown>>;
 }
 
 interface RoomJoinPayload {
@@ -86,6 +88,9 @@ export function registerRoomHandlers(io: Server): void {
         // connected sockets in this room key.
         socket.join(room.id);
         authSocket.roomId = room.id;
+
+        // Initialize object storage for this room
+        initializeRoomObjects(room.id);
 
         callback({
           roomId: room.id,
@@ -195,6 +200,7 @@ export function registerRoomHandlers(io: Server): void {
           roomId: room.id,
           title: room.title ?? `Room ${room.shareCode}`,
           participants: snapshotParticipants,
+          canvasObjects: getRoomObjects(room.id),
         });
 
         // Broadcast the new participant to all other sockets in the room.
