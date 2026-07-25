@@ -208,7 +208,7 @@ Every milestone must pass ALL of these gates before proceeding to the next:
 
 ### 📌 Next Phase
 
-- M1.B - Backend & Frontend Shells (pending approval)
+- M1.B - Backend & Frontend Shells (complete)
 
 ### 🧪 Validation Results
 
@@ -261,7 +261,7 @@ All validation gates passed:
 
 ### 📌 Next Phase
 
-- M1.C - Database Integration & Auth (pending approval)
+- M1.C - Database Integration & Auth (complete)
 
 ---
 
@@ -292,7 +292,7 @@ All validation gates passed:
 
 ### 📌 Next Phase
 
-- M1.D - Room Lifecycle (pending approval)
+- M1.D - Room Lifecycle (complete)
 
 ### 🧪 Validation Results
 
@@ -364,7 +364,7 @@ All validation gates passed:
 
 ### 📌 Next Phase
 
-- M1.E - Canvas & Objects (pending approval)
+- M1.E - Canvas & Objects (complete)
 
 ### 🧪 Validation Results
 
@@ -372,7 +372,7 @@ All validation gates passed:
 
 1. ✅ **Room Creation**: Alice creates session and room with ID and share code (5PGBMz)
 2. ✅ **Room Join via Share Code**: Bob creates session and joins Alice's room using 6-char code
-3. ✅ **Real-time Participant Synchronization**: 
+3. ✅ **Real-time Participant Synchronization**:
    - Alice initially sees only herself (PARTICIPANTS: 1)
    - After Bob joins: Alice receives room:userJoined event
    - Both windows now show 2 participants with correct display names and join times
@@ -466,7 +466,7 @@ All validation gates passed:
 
 ### 📌 Next Phase
 
-- M1.E.2 or continuation - Object CRUD with synchronization (pending approval)
+- M1.E.2 - Canvas Objects - Local Rendering (complete)
 
 ### 🧪 Validation Results
 
@@ -508,6 +508,7 @@ All validation gates passed:
 **Viewport Math (Important for future work):**
 
 The zoom-around-point algorithm ensures mouse position stays at the same screen location during zoom:
+
 1. Convert mouse position (screen space) to world coordinates using current offset and scale
 2. Calculate new scale based on zoom factor
 3. Compute new offset so the world point appears at the original mouse screen position
@@ -520,20 +521,24 @@ The empty `<Layer>` inside `<Stage>` is the designated area for future object re
 ### 📝 Files Changed
 
 **New Files:**
+
 - [client/src/store/viewport.ts](client/src/store/viewport.ts) — Zustand viewport state management
 - [client/src/components/Canvas.tsx](client/src/components/Canvas.tsx) — Konva canvas component
 
 **Modified Files:**
+
 - [client/src/App.tsx](client/src/App.tsx) — Layout restructuring, Canvas integration, conditional split layout
 - [client/package.json](client/package.json) — Added react-konva and konva dependencies
 
 ### 🧪 Browser Smoke Test Evidence
 
 **Pre-Test State:**
+
 - Dev servers running: client on 5173, server on 3000
 - Room M1.D features verified working in prior tests
 
 **Test Flow:**
+
 1. User creates guest session ✅
 2. User creates room ✅
 3. App layout switches to split view (sidebar + canvas) ✅
@@ -614,7 +619,7 @@ The empty `<Layer>` inside `<Stage>` is the designated area for future object re
 
 ### 📌 Next Phase
 
-- M1.E.3 or continuation — Object synchronization via Socket.IO (pending approval)
+- M1.E.3 - Realtime Object Synchronization (complete)
 
 ### 🧪 Validation Results
 
@@ -666,6 +671,7 @@ The empty `<Layer>` inside `<Stage>` is the designated area for future object re
 **Object Renderer Factory Pattern:**
 
 The `ObjectRenderer` component uses a factory mapping approach to avoid large switch statements:
+
 ```typescript
 const shapeComponentMap: Record<CanvasObjectType, React.ComponentType<ObjectRendererProps>> = {
   rectangle: RectangleShape,
@@ -676,6 +682,7 @@ const shapeComponentMap: Record<CanvasObjectType, React.ComponentType<ObjectRend
 ```
 
 Benefits:
+
 - Adding new types only requires: (1) create shape component, (2) register in map
 - No conditional rendering logic scattered throughout
 - Compile-time type safety: TypeScript ensures all types have registered components
@@ -684,6 +691,7 @@ Benefits:
 **Object Store Design:**
 
 Objects stored in Zustand with minimal schema:
+
 - `id`: Stable, globally unique (timestamp + random)
 - `type`: Discriminated union for type safety
 - `x, y`: World coordinates (not screen coordinates)
@@ -696,6 +704,7 @@ Objects stored in Zustand with minimal schema:
 **Prepared for Synchronization:**
 
 Current structure is designed to support Socket.IO sync in M1.E.3 with minimal refactoring:
+
 - Objects have immutable `id` for identity
 - `updateObject()` takes partial updates (diff-friendly)
 - Store actions are functional (no side effects)
@@ -705,6 +714,7 @@ Current structure is designed to support Socket.IO sync in M1.E.3 with minimal r
 ### 📝 Files Changed
 
 **New Files:**
+
 - [client/src/store/objects.ts](client/src/store/objects.ts) — Zustand canvas objects state management
 - [client/src/components/ObjectRenderer.tsx](client/src/components/ObjectRenderer.tsx) — Factory renderer component
 - [client/src/components/shapes/RectangleShape.tsx](client/src/components/shapes/RectangleShape.tsx) — Rectangle shape
@@ -713,16 +723,19 @@ Current structure is designed to support Socket.IO sync in M1.E.3 with minimal r
 - [client/src/components/shapes/StickyNoteShape.tsx](client/src/components/shapes/StickyNoteShape.tsx) — Sticky note shape
 
 **Modified Files:**
+
 - [client/src/components/Canvas.tsx](client/src/components/Canvas.tsx) — Added object rendering, keyboard shortcuts, object creation/deletion
 - [server/src/index.ts](server/src/index.ts) — CORS support for dynamic dev ports (5173-5176)
 
 ### 🧪 Browser Smoke Test Evidence
 
 **Pre-Test State:**
+
 - Dev servers running: client on 5175, server on 3000 (port 5173 in use)
 - CORS fixed to support multiple dev ports
 
 **Test Flow:**
+
 1. ✅ Reload browser at localhost:5175
 2. ✅ Create guest session with display name "TestUser"
 3. ✅ Create room (auto-named with UUID)
@@ -742,6 +755,7 @@ Current structure is designed to support Socket.IO sync in M1.E.3 with minimal r
 17. ✅ No runtime errors or warnings
 
 **Screenshots Captured:**
+
 - Initial canvas (blank after room creation)
 - Canvas with rectangle created
 - Canvas with rectangle + circle
@@ -799,14 +813,14 @@ Current structure is designed to support Socket.IO sync in M1.E.3 with minimal r
 
 ### ✅ Socket Events Added
 
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `object:create` | Client → Server | `{ operationId, roomId, object }` | Create new canvas object |
-| `object:created` | Server → All clients | `{ operationId, object, serverTs }` | Broadcast created object |
-| `object:update` | Client → Server | `{ operationId, roomId, objectId, updates }` | Move/modify object |
-| `object:updated` | Server → All clients | `{ operationId, objectId, updates, serverTs }` | Broadcast object update |
-| `object:delete` | Client → Server | `{ operationId, roomId, objectId }` | Delete an object |
-| `object:deleted` | Server → All clients | `{ operationId, objectId, serverTs }` | Broadcast deletion |
+| Event            | Direction            | Payload                                        | Description              |
+| ---------------- | -------------------- | ---------------------------------------------- | ------------------------ |
+| `object:create`  | Client → Server      | `{ operationId, roomId, object }`              | Create new canvas object |
+| `object:created` | Server → All clients | `{ operationId, object, serverTs }`            | Broadcast created object |
+| `object:update`  | Client → Server      | `{ operationId, roomId, objectId, updates }`   | Move/modify object       |
+| `object:updated` | Server → All clients | `{ operationId, objectId, updates, serverTs }` | Broadcast object update  |
+| `object:delete`  | Client → Server      | `{ operationId, roomId, objectId }`            | Delete an object         |
+| `object:deleted` | Server → All clients | `{ operationId, objectId, serverTs }`          | Broadcast deletion       |
 
 ### ✅ Synchronization Flow
 
@@ -844,7 +858,7 @@ New user joins room (late joiner):
 
 ### 📌 Next Phase
 
-- M1.E.4 or future — Object persistence, conflict resolution, or cursor tracking
+- M1.F - Validation & Testing (complete)
 
 ### 🧪 Validation Results
 
@@ -871,6 +885,7 @@ New user joins room (late joiner):
 - ✅ Duplicate protection validated (no duplicate participants and no duplicate objects observed in synced state)
 
 **Screenshots Captured:**
+
 - Alice and Bob room sidebars showing matching room code and participant membership
 - Late-join session showing immediate hydrated room/object state after join
 - Post-reconnect state showing room continuity and synchronized object counts
@@ -878,9 +893,11 @@ New user joins room (late joiner):
 ### 📝 Files Changed
 
 **New Files:**
+
 - [server/src/socket/handlers/objects.ts](server/src/socket/handlers/objects.ts) — Object sync event handlers
 
 **Modified Files:**
+
 - [server/src/socket/index.ts](server/src/socket/index.ts) — Registered object handlers
 - [server/src/socket/handlers/room.ts](server/src/socket/handlers/room.ts) — initializeRoomObjects on create, getRoomObjects on join
 - [server/src/index.ts](server/src/index.ts) — CORS support for dev ports 5173-5176
@@ -896,6 +913,79 @@ New user joins room (late joiner):
 - Object event order not guaranteed under high concurrency (last-write-wins only)
 - No tombstone records for deletes (late joiners won't see deletions that happened before they joined)
 - Keyboard shortcut creates at viewport center only; click-to-create not implemented
+
+---
+
+## Phase Status: M1.F - Validation & Testing
+
+**Status**: ✅ COMPLETE
+
+### ✅ Completed
+
+- Ran quality gates and regression checks end-to-end
+- Re-validated guest session flow, room create/join/leave, and participant presence
+- Re-validated realtime object create/update/delete synchronization across clients
+- Re-validated late-join hydration for existing room object state
+- Re-validated reconnect behavior (temporary offline/online cycle)
+- Captured backend evidence for room lifecycle and object events in server logs
+
+### ⚠️ Remaining
+
+- None
+
+### 🚧 Known Issues
+
+- No new blocker discovered in M1.F scope
+- Existing non-blocking warnings remain advisory only (ESLint TypeScript version warning and bundle-size advisory)
+
+### 📌 Next Phase
+
+- Phase 2 - Infinite Canvas and Mandatory Object Types
+
+---
+
+## Phase Status: Phase 1 - Core App and Realtime Baseline
+
+**Status**: ✅ COMPLETE
+
+### ✅ Completed
+
+- M1.A complete
+- M1.B complete
+- M1.C complete
+- M1.D complete
+- M1.E complete
+- M1.F complete
+- Phase 1 global validation gates passed
+
+### 📌 Next Phase
+
+- Phase 2 - Infinite Canvas and Mandatory Object Types
+
+### 🧪 Validation Results
+
+All required M1.F gates passed in this cycle:
+
+- ✅ `npm run typecheck` - PASS
+- ✅ `npm run lint` - PASS
+- ✅ `npm run build` - PASS
+- ✅ `npm test` - PASS (5/5)
+- ✅ Browser smoke behavior validated
+- ✅ Two-browser realtime validation scenarios passed
+- ✅ No runtime failures during validation flow
+
+Key two-browser evidence (room `836a9cd3-e886-4e58-819d-7f9762e37a50`, code `cx4LVt`):
+
+- ✅ Room create + join succeeded for multiple participants
+- ✅ Realtime object create/update/delete events observed and synchronized
+- ✅ Late joiner hydrated with matching object state
+- ✅ Reconnect returned to `connected` and preserved synchronized state
+- ✅ Room leave path executed and logged (`[room] left`)
+
+### 📝 Technical Debt
+
+- Automated browser e2e assertions are still mostly manual/interactive and should be codified in CI-ready scripts
+- Realtime validation relies on in-memory object store behavior (persistence coverage deferred to later phase)
 
 ---
 
