@@ -15,17 +15,11 @@ export interface GuestSession {
 export function useCreateSession() {
   const [session, setSession] = useState<GuestSession | null>(null);
   const [loading, setLoading] = useState(false);
-  const [wakingDatabase, setWakingDatabase] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const createSession = useCallback(async (displayName: string): Promise<void> => {
     setLoading(true);
-    setWakingDatabase(false);
     setError(null);
-
-    const wakeTimer = window.setTimeout(() => {
-      setWakingDatabase(true);
-    }, 900);
 
     try {
       const res = await fetch(`${API_URL}/auth/guest`, {
@@ -47,13 +41,11 @@ export function useCreateSession() {
       setError(message);
       throw err;
     } finally {
-      window.clearTimeout(wakeTimer);
-      setWakingDatabase(false);
       setLoading(false);
     }
   }, []);
 
-  return { session, loading, wakingDatabase, error, createSession };
+  return { session, loading, error, createSession };
 }
 
 // Hook to validate an existing guest session.

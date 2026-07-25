@@ -95,7 +95,7 @@ Phase 1 is organized into **6 milestone-driven chunks**, each ending with a work
 
 1. **M1.A: Build System & Type Safety** (1-2h) - Monorepo scaffolding, shared types
 2. **M1.B: Backend & Frontend Shells** (1-2h) - Pre-database server and client booting
-3. **M1.C: Database Integration & Auth** (1-2h) - Neon + Prisma + guest sessions
+3. **M1.C: Database Integration & Auth** (1-2h) - PostgreSQL + Prisma + guest sessions
 4. **M1.D: Room Lifecycle** (2-3h) - Room creation, join, presence tracking
 5. **M1.E: Canvas & Objects** (3-4h) - Infinite canvas, object CRUD, sync
 6. **M1.F: Validation & Testing** (2-3h) - Error handling, comprehensive testing
@@ -107,7 +107,7 @@ Phase 1 is organized into **6 milestone-driven chunks**, each ending with a work
 - Monorepo with independent client, server, shared packages (M1.A)
 - Backend Express server booting without database (M1.B)
 - Frontend React + Vite dev server booting (M1.B)
-- Neon PostgreSQL integrated via Prisma (M1.C)
+- PostgreSQL integrated via Prisma (M1.C)
 - Guest session creation and validation (M1.C)
 - Room creation, join via shareable link (M1.D)
 - Presence tracking and participant awareness (M1.D)
@@ -144,7 +144,7 @@ Phase 1 is organized into **6 milestone-driven chunks**, each ending with a work
 
 - Phase 0 documentation complete
 - Shared event contracts available for implementation
-- Neon database credentials available (needed for M1.C)
+- PostgreSQL connection credentials available (needed for M1.C)
 
 ### Milestone Exit Checklist (Mandatory for each milestone)
 
@@ -272,7 +272,7 @@ All validation gates passed:
 ### ✅ Completed
 
 - `server/prisma/schema.prisma` — all MVP models: GuestUser, GuestSession, Room, RoomParticipant, CanvasObject
-- `prisma db push` applied schema to Neon PostgreSQL successfully
+- `prisma db push` applied schema to PostgreSQL successfully
 - `server/src/db/prisma.ts` — PrismaClient singleton with global guard for hot-reload safety
 - `server/src/middleware/validate.ts` — generic Zod body validation middleware factory
 - `server/src/middleware/requireSession.ts` — Bearer token auth middleware (ready for M1.D routes)
@@ -296,7 +296,7 @@ All validation gates passed:
 
 ### 🧪 Validation Results
 
-- ✅ `prisma db push` — schema applied to Neon in 18s, all 5 tables created
+- ✅ `prisma db push` — schema applied to PostgreSQL in 18s, all 5 tables created
 - ✅ `npm run typecheck` — 0 errors
 - ✅ `npm run build` — all packages compiled
 - ✅ `npm run lint` — 0 errors, 0 warnings
@@ -305,7 +305,7 @@ All validation gates passed:
 - ✅ `POST /auth/validate` (invalid token) → 401 `SESSION_INVALID`
 - ✅ `POST /auth/guest` (missing displayName) → 400 `INVALID_PAYLOAD` with field errors
 - ✅ `POST /auth/validate` (missing token) → 400 `INVALID_PAYLOAD`
-- ✅ Database verification: GuestUser + GuestSession rows confirmed in Neon
+- ✅ Database verification: GuestUser + GuestSession rows confirmed in PostgreSQL
 - ✅ Browser smoke test: HTML 409 bytes, `<div id="root">` present, JS/CSS bundles linked
 
 ### 📝 Technical Debt
@@ -809,7 +809,7 @@ Current structure is designed to support Socket.IO sync in M1.E.3 with minimal r
   - Deduplication via `pendingOperations` Set (ref, no re-renders)
 - Fixed CORS bug in `server/src/index.ts` — dev mode now allows ports 5173-5176
 - Fixed data bug in `objects.ts` — `socket.data.currentRoom` → `authSocket.roomId`
-- Added centralized Neon cold-start retry handling and reused it in room lifecycle paths used by realtime validation
+- Added centralized transient database retry handling and reused it in room lifecycle paths used by realtime validation
 
 ### ✅ Socket Events Added
 
@@ -853,7 +853,7 @@ New user joins room (late joiner):
 
 ### 🚧 Known Issues
 
-- Multiple test participants from prior sessions accumulate in PARTICIPANTS list (Neon DB retains prior test sessions; doesn't affect functionality)
+- Multiple test participants from prior sessions accumulate in PARTICIPANTS list (DB retains prior test sessions; doesn't affect functionality)
 - Object creation via keyboard shortcut focuses on viewport center only (not click-to-place)
 
 ### 📌 Next Phase
@@ -901,7 +901,7 @@ New user joins room (late joiner):
 - [server/src/socket/index.ts](server/src/socket/index.ts) — Registered object handlers
 - [server/src/socket/handlers/room.ts](server/src/socket/handlers/room.ts) — initializeRoomObjects on create, getRoomObjects on join
 - [server/src/index.ts](server/src/index.ts) — CORS support for dev ports 5173-5176
-- [server/src/db/neonRetry.ts](server/src/db/neonRetry.ts) — centralized transient Neon retry utility
+- Centralized transient database retry utility was removed after migration to local Docker PostgreSQL
 - [client/src/components/Canvas.tsx](client/src/components/Canvas.tsx) — Socket emit + listen for object events
 - [client/src/hooks/useRoom.ts](client/src/hooks/useRoom.ts) — setObjects on join, clear on leave
 - [client/src/store/objects.ts](client/src/store/objects.ts) — Added setObjects action for late-joiner hydration

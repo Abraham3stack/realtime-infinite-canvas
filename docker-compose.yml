@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ric-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-canvas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-canvas}
+      POSTGRES_DB: ${POSTGRES_DB:-realtime_canvas}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: ric-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql://canvas:canvas@postgres:5432/realtime_canvas?schema=public}
+      PORT: ${SERVER_PORT:-3000}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:5173}
+      NODE_ENV: development
+    ports:
+      - "${SERVER_PORT:-3000}:3000"
+    command: >
+      sh -c "
+      node /app/node_modules/prisma/build/index.js migrate deploy --schema /app/server/prisma/schema.prisma &&
+      node /app/node_modules/prisma/build/index.js db push --schema /app/server/prisma/schema.prisma &&
+      node /app/server/dist/index.js
+      "
+
+volumes:
+  postgres_data:

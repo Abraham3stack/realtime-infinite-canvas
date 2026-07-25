@@ -92,7 +92,7 @@ Best balance of delivery speed, reliability, and acceptable collaboration correc
 
 ### Decision
 
-Use Neon PostgreSQL with Prisma ORM.
+Use PostgreSQL with Prisma ORM.
 
 ### Alternatives Considered
 

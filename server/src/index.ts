@@ -9,7 +9,7 @@ import authRouter from './routes/auth.js';
 // rather than surfacing as an opaque Prisma connection failure on first request.
 if (!process.env.DATABASE_URL) {
   console.error('[server] FATAL: DATABASE_URL environment variable is not set.');
-  console.error('[server] Copy server/.env.example to server/.env and fill in your Neon connection string.');
+  console.error('[server] Copy server/.env.example to server/.env and set a valid PostgreSQL connection string.');
   process.exit(1);
 }
 

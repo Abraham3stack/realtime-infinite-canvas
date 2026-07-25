@@ -7,7 +7,6 @@ import { useRoomStore } from './store/room.js';
 import { Canvas } from './components/Canvas.js';
 import { LoadingButton } from './components/ui/LoadingButton.js';
 import { SkeletonBlock } from './components/ui/SkeletonBlock.js';
-import { Spinner } from './components/ui/Spinner.js';
 import { StatusBadge } from './components/ui/StatusBadge.js';
 
 type ActionLoading = 'create-session' | 'create-room' | 'join-room' | 'leave-room' | null;
@@ -33,7 +32,6 @@ const App: FC = () => {
   const {
     session,
     loading: sessionLoading,
-    wakingDatabase,
     error: sessionError,
     createSession,
   } = useCreateSession();
@@ -320,21 +318,12 @@ const App: FC = () => {
                     onClick={handleCreateSession}
                     disabled={sessionLoading}
                     loading={loadingAction === 'create-session'}
-                    loadingLabel={wakingDatabase ? 'Waking database...' : 'Creating session...'}
+                    loadingLabel="Creating session..."
                     aria-label="Create guest session"
                   >
                     Create Session
                   </LoadingButton>
                 </div>
-                {sessionLoading && wakingDatabase && (
-                  <div className="loading-note" role="status" aria-live="polite">
-                    <Spinner size="md" />
-                    <div>
-                      <p className="card-strong">Waking up database...</p>
-                      <p className="subtle-text">This may take a few seconds on the free Neon plan.</p>
-                    </div>
-                  </div>
-                )}
                 {sessionError && <p className="inline-error">{sessionError}</p>}
               </section>
             ) : (

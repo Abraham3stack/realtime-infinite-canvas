@@ -19,6 +19,7 @@ realtime-infinite-canvas/
 
 - Node.js >= 18.0.0
 - npm >= 9.0.0
+- Docker Desktop (or compatible Docker Engine + Compose plugin)
 
 ### Installation
 
@@ -27,19 +28,67 @@ realtime-infinite-canvas/
 npm install
 ```
 
+### Environment
+
+```bash
+# Server environment (local app runs outside containers)
+cp server/.env.example server/.env
+
+# Optional Docker compose overrides
+cp .env.docker.example .env
+```
+
+Important variables:
+
+- `server/.env`
+  - `DATABASE_URL` (local Docker Postgres by default)
+  - `PORT`
+  - `CLIENT_ORIGIN`
+  - `NODE_ENV`
+- `.env` (optional, for docker compose interpolation)
+  - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`
+  - `SERVER_PORT`, `CLIENT_ORIGIN`
+  - `DATABASE_URL_DOCKER`
+
+### Preferred Local Workflow
+
+```bash
+# 1) Start PostgreSQL + backend in Docker
+docker compose up --build
+
+# 2) Start frontend locally in another terminal
+npm run dev -w client
+```
+
+Backend will wait for PostgreSQL health, apply existing Prisma migrations, push the baseline schema, then start on port `3000`.
+
 ### Development
 
 ```bash
-# Start frontend dev server (port 5173)
-npm run dev
+# Start all local workspaces without Docker (requires a running Postgres instance)
+npm run dev:all
 
-# Or individually:
-cd client
-npm run dev
+# Start only frontend
+npm run dev -w client
 
-# And in another terminal:
-cd server
-npm run dev
+# Start only backend
+npm run dev -w server
+```
+
+### Prisma Database Commands
+
+```bash
+# Generate Prisma Client
+npm run prisma:generate -w server
+
+# Apply existing migrations
+npm run prisma:migrate:deploy -w server
+
+# Show migration status
+npm run prisma:status -w server
+
+# Sync schema without creating new migrations (used for baseline setup)
+npm run prisma:push -w server
 ```
 
 ### Build
@@ -64,6 +113,24 @@ npm run lint
 npm run format
 ```
 
+### Troubleshooting
+
+```bash
+# Check container health and logs
+docker compose ps
+docker compose logs -f postgres
+docker compose logs -f server
+
+# Re-run Prisma setup against local Docker Postgres
+npm run prisma:generate -w server
+npm run prisma:migrate:deploy -w server
+npm run prisma:push -w server
+```
+
+- If `DATABASE_URL` errors occur, verify `server/.env` and container ports.
+- If backend starts before DB in non-compose runs, start Docker Postgres first (`docker compose up postgres -d`).
+- To reset local DB data, stop compose and remove the named volume: `docker compose down -v`.
+
 ## Technology Stack
 
 **Frontend:**
@@ -79,8 +146,8 @@ npm run format
 - Express
 - TypeScript
 - Socket.IO
-- Prisma (coming in M1.C)
-- Neon PostgreSQL (coming in M1.C)
+- Prisma
+- PostgreSQL (local Docker for development)
 
 **Shared:**
 

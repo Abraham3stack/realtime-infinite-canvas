@@ -1,7 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import type { CanvasObject as PrismaCanvasObject, Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
-import { withNeonColdStartRetry } from '../../db/neonRetry.js';
 import type { AuthenticatedSocket } from '../types.js';
 
 // Type definitions for object event payloads
@@ -286,39 +285,29 @@ function buildUpdateData(existing: PrismaCanvasObject, updates: Record<string, u
 
 const prismaObjectRepository: ObjectRepository = {
   async createObject(data) {
-    return withNeonColdStartRetry(async () => {
-      return prisma.canvasObject.create({ data });
-    });
+    return prisma.canvasObject.create({ data });
   },
   async findObject(roomId, objectId) {
-    return withNeonColdStartRetry(async () => {
-      return prisma.canvasObject.findFirst({
-        where: { id: objectId, roomId, deletedAt: null },
-      });
+    return prisma.canvasObject.findFirst({
+      where: { id: objectId, roomId, deletedAt: null },
     });
   },
   async updateObject(objectId, data) {
-    return withNeonColdStartRetry(async () => {
-      return prisma.canvasObject.update({
-        where: { id: objectId },
-        data,
-      });
+    return prisma.canvasObject.update({
+      where: { id: objectId },
+      data,
     });
   },
   async deleteObject(roomId, objectId) {
-    const deleted = await withNeonColdStartRetry(async () => {
-      return prisma.canvasObject.deleteMany({
-        where: { id: objectId, roomId },
-      });
+    const deleted = await prisma.canvasObject.deleteMany({
+      where: { id: objectId, roomId },
     });
     return deleted.count;
   },
   async getRoomObjects(roomId) {
-    return withNeonColdStartRetry(async () => {
-      return prisma.canvasObject.findMany({
-        where: { roomId, deletedAt: null },
-        orderBy: [{ zIndex: 'asc' }, { createdAt: 'asc' }],
-      });
+    return prisma.canvasObject.findMany({
+      where: { roomId, deletedAt: null },
+      orderBy: [{ zIndex: 'asc' }, { createdAt: 'asc' }],
     });
   },
 };

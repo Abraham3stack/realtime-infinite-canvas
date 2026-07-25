@@ -1,6 +1,6 @@
 // Prisma schema for Realtime Infinite Canvas
-// Datasource: Neon PostgreSQL (serverless-compatible connection pooling recommended)
-// All MVP models are defined here in a single migration to avoid incremental schema churn.
+// Datasource: PostgreSQL via DATABASE_URL (supports local Docker and hosted providers)
+// All MVP models are defined here in a single baseline schema.
 
 generator client {
   provider = "prisma-client-js"
