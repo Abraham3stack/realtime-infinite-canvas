@@ -213,6 +213,7 @@ Every milestone must pass ALL of these gates before proceeding to the next:
 ### 🧪 Validation Results
 
 All validation gates passed:
+
 - ✅ `npm run typecheck` - **PASS** (0 errors)
 - ✅ `npm run build` - **PASS** (all packages compiled)
 - ✅ `npm run lint` - **PASS** (0 errors, 0 warnings)
@@ -229,6 +230,51 @@ All validation gates passed:
 3. **Zod API Mismatches** → Fixed all instances of `.non_negative()` → `.nonnegative()` (Zod v3)
 4. **Missing Schema Exports** → Added `export` to ViewportSchema and RoomParticipantStatusSchema
 5. **Discriminated Union Incompatibility** → Manually constructed ObjectCreatePayloadSchema without `.omit()`
+
+---
+
+## Phase Status: M1.B - Backend & Frontend Shells
+
+**Status**: ✅ COMPLETE
+
+### ✅ Completed
+
+- Express HTTP server on port 3000 with CORS and `/health` endpoint
+- Socket.IO server attached to HTTP server, configured for CORS with the Vite dev origin
+- `server/src/socket/index.ts` — connection, `server:hello` emit, `ping/pong`, disconnect
+- Socket.IO client singleton in `client/src/socket.ts` with `autoConnect: false`
+- `useConnectionStatus` React hook — manages connect/disconnect lifecycle and server:hello state
+- `client/src/App.tsx` — live connection status indicator (coloured dot + status label) and server:hello payload display
+- `client/.env.development` — `VITE_SERVER_URL=http://localhost:3000`
+- `tsx watch` dev script for the server (replaces broken ts-node/esm approach)
+- `npm run dev:all` root script using `concurrently` for parallel server+client startup
+- ESLint override allowing `console.log` in `server/src/**` (appropriate for Node.js lifecycle logs)
+- `"types": ["vite/client"]` added to `client/tsconfig.json` for `import.meta.env` support
+
+### ⚠️ Remaining
+
+- None - M1.B complete
+
+### 🚧 Known Issues
+
+- None
+
+### 📌 Next Phase
+
+- M1.C - Database Integration & Auth (pending approval)
+
+### 🧪 Validation Results
+
+- ✅ `npm run typecheck` — 0 errors
+- ✅ `npm run build` — all packages compiled; client bundle 186 kB
+- ✅ `npm run lint` — 0 errors, 0 warnings
+- ✅ Backend health check: `GET /health` → `{"status":"ok",...}`
+- ✅ Socket.IO handshake: EIO4 polling response with `sid` and `upgrades`
+- ✅ End-to-end connection: client connected, `server:hello` received, clean disconnect
+
+### 📝 Technical Debt
+
+- `cors` origin is hardcoded to `http://localhost:5173` in the fallback. Production deployment will require `CLIENT_ORIGIN` env var to be set correctly (M1.F or deploy step).
 
 ---
 

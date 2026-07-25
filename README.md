@@ -67,6 +67,7 @@ npm run format
 ## Technology Stack
 
 **Frontend:**
+
 - React 18
 - TypeScript
 - Vite
@@ -74,6 +75,7 @@ npm run format
 - Zustand (state management)
 
 **Backend:**
+
 - Express
 - TypeScript
 - Socket.IO
@@ -81,23 +83,27 @@ npm run format
 - Neon PostgreSQL (coming in M1.C)
 
 **Shared:**
+
 - TypeScript
 - Zod (schema validation)
 
 ## Packages
 
 ### shared
+
 Shared types and validation schemas for client and server.
 
 - `shared/src/types/` - TypeScript interfaces
 - `shared/src/validation/` - Zod schemas
 
 ### server
+
 Backend Express server with Socket.IO realtime support.
 
 - `server/src/index.ts` - Entry point
 
 ### client
+
 Frontend React application with Vite build system.
 
 - `client/src/main.tsx` - Entry point
