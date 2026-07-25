@@ -1,0 +1,30 @@
+{
+  "name": "realtime-infinite-canvas",
+  "version": "0.0.1",
+  "description": "Realtime collaborative infinite canvas",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint --ext .ts,.tsx . --ignore-path .gitignore",
+    "format": "prettier --write --ignore-path .gitignore .",
+    "dev": "npm run dev --workspaces --if-present",
+    "install:all": "npm install && npm install --workspaces"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
