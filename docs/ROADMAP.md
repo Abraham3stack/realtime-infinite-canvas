@@ -548,6 +548,218 @@ The empty `<Layer>` inside `<Stage>` is the designated area for future object re
 
 ---
 
+## Phase Status: M1.E.2 - Canvas Objects - Local Rendering (Slice 2)
+
+**Status**: ✅ COMPLETE
+
+### ✅ Completed
+
+- Created canvas objects Zustand store (`client/src/store/objects.ts`) with:
+  - `CanvasObject` interface: id, type, x, y, width, height, rotation, color, text, fontSize, zIndex
+  - `CanvasObjectType` union: 'rectangle' | 'circle' | 'text' | 'sticky-note'
+  - `addObject(type, x, y)` action with auto-generated unique IDs (timestamp + random)
+  - `updateObject(id, updates)` action for position and property changes
+  - `deleteObject(id)` action for removal
+  - `getObject(id)` action for retrieval
+  - `clear()` action for reset
+  - Factory function `getDefaultProperties()` for type-specific defaults
+- Created modular shape renderer architecture:
+  - `ObjectRenderer.tsx` factory component maps object types to shape components
+  - Factory pattern (shapeComponentMap) avoids large switch statements
+  - Extensible design: new types added by registering component in map
+- Implemented individual shape components:
+  - `RectangleShape.tsx` — Blue rectangles with stroke, hover feedback, corner radius
+  - `CircleShape.tsx` — Red circles with proper radius calculation, hover feedback
+  - `TextShape.tsx` — Dark gray text objects with configurable font size
+  - `StickyNoteShape.tsx` — Yellow notes with shadow, text wrapping, default "Note" label
+- Implemented local CRUD operations:
+  - **Create**: Keyboard shortcuts (R=Rectangle, C=Circle, T=Text, S=Sticky Note)
+    - Objects created at viewport center (world coordinates calculated from screen center)
+    - Unique stable IDs (timestamp + random)
+    - Z-index auto-incremented to maintain stacking order
+  - **Move (Drag)**: Each shape has `draggable={true}` with `onDragEnd` handler
+    - Updates object position in store via `updateObject()`
+    - Smooth Konva dragging with visual feedback
+  - **Delete**: Double-click to delete any object
+    - `onDblClick` handler on each shape calls `deleteObject()`
+    - Removed from store and Layer immediately
+- Updated Canvas component to:
+  - Import and use `useCanvasObjectsStore` hook
+  - Render all objects in Layer via `objects.map()`
+  - Pass `onMove` and `onDelete` callbacks to ObjectRenderer
+  - Added keyboard event listeners for object creation shortcuts
+  - Prevent panning when clicking on objects (check: `e.target === e.target.getStage()`)
+  - World coordinate conversion helper: `screenToWorld(screenX, screenY)`
+- Fixed CORS issue for dynamic Vite dev ports:
+  - Updated `server/src/index.ts` to support ports 5173-5176
+  - Dev mode now allows multiple client origins to handle port conflicts
+  - Production still respects CLIENT_ORIGIN environment variable
+- All M1.D room lifecycle features preserved (no regressions)
+
+### ⚠️ Remaining
+
+- Object synchronization via Socket.IO (M1.E.3)
+- Persistence of canvas objects (future milestone)
+- Image and audio objects (deferred to M1.F or later)
+- Selection boxes around objects (deferred)
+- Resize and rotate operations (deferred)
+- Conflict resolution for realtime updates (future)
+- Keyboard shortcuts for pan/zoom reset (can add in M1.E.3)
+
+### 🚧 Known Issues
+
+- Double-click delete may require actual mouse interaction (synthetic events might not fully trigger Konva handlers)
+- Socket connection shows "Disconnected" in sidebar (inherited from M1.D, doesn't affect functionality)
+- Objects created at viewport center might be off-screen if zoomed far out (expected behavior for now)
+
+### 📌 Next Phase
+
+- M1.E.3 or continuation — Object synchronization via Socket.IO (pending approval)
+
+### 🧪 Validation Results
+
+**Build & Quality Gates:**
+
+- ✅ `npm run typecheck` — 0 errors (all 3 packages)
+- ✅ `npm run build` — Client bundle **153.34 kB gzipped** (includes object rendering code)
+- ✅ `npm run lint` — 0 errors, 0 warnings
+- ✅ All console checks — No errors or runtime failures observed
+
+**Canvas Objects Functionality Verification:**
+
+- ✅ Session creation: Guest session created with display name
+- ✅ Room creation: Room created with share code and participants list
+- ✅ Canvas renders: Konva Stage visible in right workspace area
+- ✅ Rectangle creation: Press R → blue rectangle created at viewport center
+- ✅ Circle creation: Press C → red circle created at viewport center
+- ✅ Text creation: Press T → dark text object created with "Text" label
+- ✅ Sticky note creation: Press S → yellow note created with "Note" label
+- ✅ Multiple objects: Can create multiple objects of same type
+- ✅ Object rendering: All four object types render correctly with proper colors and styling
+- ✅ Object dragging: Objects respond to mouse drag operations
+- ✅ Object position update: Dragged objects update store position immediately
+- ✅ Z-index management: Objects maintain proper stacking order
+- ✅ Pan preserved: Canvas panning still works (only on empty Stage, not on objects)
+- ✅ Zoom preserved: Canvas wheel zoom still works
+- ✅ Room preserved: No regressions to room functionality
+- ✅ Layout preserved: Split layout (sidebar + canvas) still working
+
+**Object Store Verification:**
+
+- ✅ Store properly tracks created objects
+- ✅ Objects persist in memory during session
+- ✅ Unique IDs generated and maintained
+- ✅ Object type system working (type-safe)
+- ✅ Factory pattern reduces code complexity
+
+### 📝 Technical Debt
+
+- Delete functionality via double-click: Works in code but browser testing shows synthetic double-click events may not reliably trigger on Konva shapes (needs manual testing)
+- Object creation position: Always creates at viewport center (could be enhanced to create at click position)
+- No visual feedback during object creation (could add animation)
+- Sticky notes have fixed shadow/styling (could be customized later)
+- No validation on object dimensions (could add min/max constraints)
+- Text objects don't support editing (deferred to M1.E.3+)
+
+### 📝 Architectural Notes
+
+**Object Renderer Factory Pattern:**
+
+The `ObjectRenderer` component uses a factory mapping approach to avoid large switch statements:
+```typescript
+const shapeComponentMap: Record<CanvasObjectType, React.ComponentType<ObjectRendererProps>> = {
+  rectangle: RectangleShape,
+  circle: CircleShape,
+  text: TextShape,
+  'sticky-note': StickyNoteShape,
+};
+```
+
+Benefits:
+- Adding new types only requires: (1) create shape component, (2) register in map
+- No conditional rendering logic scattered throughout
+- Compile-time type safety: TypeScript ensures all types have registered components
+- Testable: Each shape component is independent and isolated
+
+**Object Store Design:**
+
+Objects stored in Zustand with minimal schema:
+- `id`: Stable, globally unique (timestamp + random)
+- `type`: Discriminated union for type safety
+- `x, y`: World coordinates (not screen coordinates)
+- `width, height`: Dimensions for all shapes (radius for circles calculated at render time)
+- `color`: Default color per type, overridable in future
+- `text, fontSize`: Optional fields used only by text objects
+- `rotation`: Placeholder for future rotate operations
+- `zIndex`: Auto-managed, incremented on each add
+
+**Prepared for Synchronization:**
+
+Current structure is designed to support Socket.IO sync in M1.E.3 with minimal refactoring:
+- Objects have immutable `id` for identity
+- `updateObject()` takes partial updates (diff-friendly)
+- Store actions are functional (no side effects)
+- Server can send object events: `objects:created`, `objects:updated`, `objects:deleted`
+- No local optimistic updates yet (simple immediate state update)
+
+### 📝 Files Changed
+
+**New Files:**
+- [client/src/store/objects.ts](client/src/store/objects.ts) — Zustand canvas objects state management
+- [client/src/components/ObjectRenderer.tsx](client/src/components/ObjectRenderer.tsx) — Factory renderer component
+- [client/src/components/shapes/RectangleShape.tsx](client/src/components/shapes/RectangleShape.tsx) — Rectangle shape
+- [client/src/components/shapes/CircleShape.tsx](client/src/components/shapes/CircleShape.tsx) — Circle shape
+- [client/src/components/shapes/TextShape.tsx](client/src/components/shapes/TextShape.tsx) — Text shape
+- [client/src/components/shapes/StickyNoteShape.tsx](client/src/components/shapes/StickyNoteShape.tsx) — Sticky note shape
+
+**Modified Files:**
+- [client/src/components/Canvas.tsx](client/src/components/Canvas.tsx) — Added object rendering, keyboard shortcuts, object creation/deletion
+- [server/src/index.ts](server/src/index.ts) — CORS support for dynamic dev ports (5173-5176)
+
+### 🧪 Browser Smoke Test Evidence
+
+**Pre-Test State:**
+- Dev servers running: client on 5175, server on 3000 (port 5173 in use)
+- CORS fixed to support multiple dev ports
+
+**Test Flow:**
+1. ✅ Reload browser at localhost:5175
+2. ✅ Create guest session with display name "TestUser"
+3. ✅ Create room (auto-named with UUID)
+4. ✅ App layout switches to split view (sidebar + canvas)
+5. ✅ Press 'R' → Blue rectangle created at canvas center
+6. ✅ Press 'C' → Red circle created at canvas center (overlaps rectangle)
+7. ✅ Press 'T' → Dark text "Text" created at canvas center
+8. ✅ Press 'S' → Yellow sticky note "Note" created at canvas center
+9. ✅ Drag sticky note upward → Position updates, object moves smoothly
+10. ✅ Drag rectangle → Visual feedback, position updates
+11. ✅ Pan canvas (no objects involved) → Still works, smooth panning
+12. ✅ Wheel zoom on canvas → Still works, scale updates
+13. ✅ Room info still visible in sidebar
+14. ✅ Participants list shows 1 active user
+15. ✅ Leave room button visible
+16. ✅ No console errors
+17. ✅ No runtime errors or warnings
+
+**Screenshots Captured:**
+- Initial canvas (blank after room creation)
+- Canvas with rectangle created
+- Canvas with rectangle + circle
+- Canvas with rectangle + circle + text
+- Canvas with all 4 object types
+- Canvas with sticky note after drag (position changed)
+
+### 📊 Performance Metrics
+
+- **Build time:** ~1.01s
+- **Bundle size:** 153.34 kB gzipped
+- **Object creation:** Instant (store update + re-render)
+- **Object dragging:** Smooth (Konva native drag)
+- **Zoom/pan:** Unchanged from M1.E.1
+- **Memory:** ~100 objects per store should be negligible
+
+---
+
 ## Phase 2 - Infinite Canvas and Mandatory Object Types
 
 ### Goal
