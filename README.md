@@ -45,10 +45,34 @@ Important variables:
   - `PORT`
   - `CLIENT_ORIGIN`
   - `NODE_ENV`
+  - `CLOUDINARY_CLOUD_NAME`
+  - `CLOUDINARY_API_KEY`
+  - `CLOUDINARY_API_SECRET`
+  - `CLOUDINARY_UPLOAD_FOLDER`
+  - `UPLOAD_MAX_FILES`
+  - `UPLOAD_MAX_IMAGE_BYTES`
+  - `UPLOAD_MAX_AUDIO_BYTES`
+  - `UPLOAD_MAX_VIDEO_BYTES`
 - `.env` (optional, for docker compose interpolation)
   - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`
   - `SERVER_PORT`, `CLIENT_ORIGIN`
   - `DATABASE_URL_DOCKER`
+  - Cloudinary and upload limit variables listed above (used by server container)
+
+### Cloudinary Setup
+
+1. Create a Cloudinary account and copy Cloud name, API key, and API secret.
+2. Add credentials to `server/.env` when running server locally.
+3. Add the same credentials to root `.env` for Docker-based backend runs.
+4. Restart backend after changing environment values.
+
+Supported upload formats:
+
+- Images: `image/png`, `image/jpeg`, `image/webp`, `image/gif`
+- Audio: `audio/mpeg`, `audio/wav`, `audio/x-wav`, `audio/ogg`, `audio/mp4`, `audio/webm`
+- Video: `video/mp4`, `video/webm`, `video/quicktime`, `video/ogg`
+
+Media binaries are stored in Cloudinary only. PostgreSQL stores metadata and canvas object state.
 
 ### Preferred Local Workflow
 
@@ -128,8 +152,54 @@ npm run prisma:push -w server
 ```
 
 - If `DATABASE_URL` errors occur, verify `server/.env` and container ports.
+- If uploads fail with Cloudinary configuration errors, verify `CLOUDINARY_*` values in the active environment file.
 - If backend starts before DB in non-compose runs, start Docker Postgres first (`docker compose up postgres -d`).
 - To reset local DB data, stop compose and remove the named volume: `docker compose down -v`.
+
+## Media Upload API
+
+The server exposes authenticated media upload endpoints:
+
+- `POST /media/upload`
+  - Auth: `Authorization: Bearer <sessionToken>`
+  - Content type: `multipart/form-data`
+  - Fields:
+    - `expectedType`: `image` | `audio` | `video`
+    - `files`: one or more media files
+  - Success response:
+    - `success: true`
+    - `data.uploads[]` metadata:
+      - `publicId`
+      - `secureUrl`
+      - `resourceType`
+      - `width` and `height` when available
+      - `duration` for audio/video
+      - `format`
+      - `bytes`
+      - `createdAt`
+      - `mimeType`
+  - Error response:
+    - `success: false`
+    - `error.code`, `error.message`, optional `error.details`
+
+Upload guards:
+
+- MIME type allow-list validation
+- Per-type size limits (image/audio/video)
+- Maximum files per request (`UPLOAD_MAX_FILES`)
+- Clean rejection for malformed multipart payloads and unsupported formats
+
+## Export Support
+
+Canvas toolbar includes:
+
+- PNG export from current canvas stage
+- JSON export containing:
+  - shape/text/media objects
+  - position, size, z-index, rotation
+  - ownership (`createdBySessionId`)
+  - timestamps (`createdAt`, `updatedAt`, `mediaCreatedAt`)
+  - media metadata (`publicId`, `secureUrl`, `resourceType`, `format`, `bytes`, dimensions, duration, MIME type)
 
 ## Technology Stack
 
@@ -182,6 +252,7 @@ Frontend React application with Vite build system.
 - [docs/ROADMAP.md](docs/ROADMAP.md) - Implementation phases and milestones
 - [docs/DECISIONS.md](docs/DECISIONS.md) - Architecture decisions
 - [docs/SOCKET_EVENTS.md](docs/SOCKET_EVENTS.md) - Socket.IO event contract
+- [docs/API.md](docs/API.md) - REST API contract
 - [docs/DATA_MODEL.md](docs/DATA_MODEL.md) - Prisma data model design
 
 ## Roadmap

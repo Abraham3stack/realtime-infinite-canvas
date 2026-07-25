@@ -8,6 +8,7 @@ import { ObjectRenderer } from './ObjectRenderer.js';
 import { LoadingOverlay } from './ui/LoadingOverlay.js';
 import { socket } from '../socket.js';
 import type { CanvasObjectType } from '../store/objects.js';
+import { uploadMediaFiles, type MediaUploadType, type UploadedMedia } from '../hooks/useMediaUpload.js';
 
 // Type definitions for socket payloads
 interface ObjectCreatedPayload {
@@ -34,6 +35,9 @@ interface CanvasProps {
   loadingPhase?: 'connecting' | 'hydrating' | 'syncing' | null;
   loadingCopy?: { title: string; sub: string } | null;
   onObjectDeleted?: () => void;
+  onNotify?: (message: string) => void;
+  sessionToken?: string;
+  sessionId?: string;
 }
 
 const TOOLBAR_ITEMS: Array<{ type: CanvasObjectType; label: string; hotkey: string; icon: string }> = [
@@ -41,8 +45,6 @@ const TOOLBAR_ITEMS: Array<{ type: CanvasObjectType; label: string; hotkey: stri
   { type: 'circle', label: 'Circle', hotkey: 'C', icon: '()' },
   { type: 'text', label: 'Text', hotkey: 'T', icon: 'T' },
   { type: 'sticky-note', label: 'Sticky Note', hotkey: 'S', icon: 'SN' },
-  { type: 'image', label: 'Image', hotkey: 'I', icon: 'IMG' },
-  { type: 'audio', label: 'Audio', hotkey: 'A', icon: 'AUD' },
 ];
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -50,11 +52,21 @@ export const Canvas: React.FC<CanvasProps> = ({
   loadingPhase = null,
   loadingCopy = null,
   onObjectDeleted,
+  onNotify,
+  sessionToken,
+  sessionId,
 }) => {
   const stageRef = useRef<Konva.Stage>(null);
+  const imageUploadInputRef = useRef<HTMLInputElement>(null);
+  const audioUploadInputRef = useRef<HTMLInputElement>(null);
+  const videoUploadInputRef = useRef<HTMLInputElement>(null);
   const [stageSize, setStageSize] = useState({ width: 1024, height: 768 });
   const [activeTool, setActiveTool] = useState<CanvasObjectType | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [uploadInProgress, setUploadInProgress] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadLabel, setUploadLabel] = useState<string | null>(null);
+  const [failedUpload, setFailedUpload] = useState<{ files: File[]; mediaType: MediaUploadType; message: string } | null>(null);
   
   // Viewport state: pan and zoom transforms
   const { offsetX, offsetY, scale, panBy, zoomBy } = useViewportStore((s) => ({
@@ -66,9 +78,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   }));
 
   // Canvas objects: local CRUD state
-  const { objects, addObject, updateObject, deleteObject } = useCanvasObjectsStore((s) => ({
+  const { objects, addObject, addMediaObject, updateObject, deleteObject } = useCanvasObjectsStore((s) => ({
     objects: s.objects,
     addObject: s.addObject,
+    addMediaObject: s.addMediaObject,
     updateObject: s.updateObject,
     deleteObject: s.deleteObject,
   }));
@@ -131,6 +144,196 @@ export const Canvas: React.FC<CanvasProps> = ({
     emitCreate(object);
   }, [addObject, emitCreate, offsetX, offsetY, room, scale, stageSize]);
 
+  const createMediaObjectsAndSync = useCallback((uploads: UploadedMedia[]) => {
+    if (!room) return;
+
+    const centerX = (stageSize.width / 2 - offsetX) / scale;
+    const centerY = (stageSize.height / 2 - offsetY) / scale;
+
+    const createdIds: string[] = [];
+
+    uploads.forEach((upload, index) => {
+      const type = upload.resourceType;
+      const id = addMediaObject({
+        type,
+        x: centerX + index * 28,
+        y: centerY + index * 22,
+        mediaUrl: upload.secureUrl,
+        mediaPublicId: upload.publicId,
+        mediaResourceType: upload.resourceType,
+        mediaFormat: upload.format,
+        mediaWidth: upload.width,
+        mediaHeight: upload.height,
+        mimeType: upload.mimeType,
+        sizeBytes: upload.bytes,
+        durationMs: upload.duration,
+        mediaCreatedAt: upload.createdAt,
+        text: type === 'audio' || type === 'video' ? upload.originalFilename : undefined,
+        createdBySessionId: sessionId,
+      });
+
+      const object = useCanvasObjectsStore.getState().getObject(id);
+      if (!object) return;
+
+      createdIds.push(id);
+      emitCreate(object);
+    });
+
+    if (createdIds.length > 0) {
+      setSelectedObjectId(createdIds[createdIds.length - 1]);
+    }
+  }, [addMediaObject, emitCreate, offsetX, offsetY, room, scale, sessionId, stageSize]);
+
+  const runMediaUpload = useCallback(async (mediaType: MediaUploadType, files: File[]) => {
+    if (!room) {
+      onNotify?.('Join a room before uploading media');
+      return;
+    }
+
+    if (!sessionToken) {
+      onNotify?.('Session token missing. Recreate your guest session and try again.');
+      return;
+    }
+
+    if (uploadInProgress) {
+      onNotify?.('Upload already in progress');
+      return;
+    }
+
+    if (files.length === 0) {
+      return;
+    }
+
+    setUploadInProgress(true);
+    setUploadProgress(0);
+    setUploadLabel(`Uploading ${files.length} ${mediaType} file${files.length > 1 ? 's' : ''}...`);
+    setFailedUpload(null);
+
+    try {
+      const uploads = await uploadMediaFiles({
+        files,
+        expectedType: mediaType,
+        sessionToken,
+        onProgress: (progress) => setUploadProgress(progress),
+      });
+
+      createMediaObjectsAndSync(uploads);
+      onNotify?.(`✓ Uploaded ${uploads.length} ${mediaType} file${uploads.length > 1 ? 's' : ''}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Media upload failed';
+      setFailedUpload({ files, mediaType, message });
+      onNotify?.(`Upload failed: ${message}`);
+    } finally {
+      setUploadInProgress(false);
+      setUploadLabel(null);
+      setUploadProgress(0);
+    }
+  }, [createMediaObjectsAndSync, onNotify, room, sessionToken, uploadInProgress]);
+
+  const openUploadPicker = useCallback((mediaType: MediaUploadType) => {
+    if (uploadInProgress) return;
+    if (mediaType === 'image') imageUploadInputRef.current?.click();
+    if (mediaType === 'audio') audioUploadInputRef.current?.click();
+    if (mediaType === 'video') videoUploadInputRef.current?.click();
+  }, [uploadInProgress]);
+
+  const handlePickerChanged = useCallback(async (mediaType: MediaUploadType, files: FileList | null) => {
+    const nextFiles = files ? Array.from(files) : [];
+    await runMediaUpload(mediaType, nextFiles);
+
+    if (mediaType === 'image' && imageUploadInputRef.current) imageUploadInputRef.current.value = '';
+    if (mediaType === 'audio' && audioUploadInputRef.current) audioUploadInputRef.current.value = '';
+    if (mediaType === 'video' && videoUploadInputRef.current) videoUploadInputRef.current.value = '';
+  }, [runMediaUpload]);
+
+  const downloadBlob = useCallback((blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleExportPng = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const dataUrl = stage.toDataURL({ pixelRatio: 2 });
+    const anchor = document.createElement('a');
+    anchor.href = dataUrl;
+    anchor.download = `canvas-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    onNotify?.('✓ PNG exported');
+  }, [onNotify]);
+
+  const handleExportJson = useCallback(() => {
+    const payload = {
+      roomId: room?.id ?? null,
+      exportedAt: new Date().toISOString(),
+      objects: objects.map((obj) => {
+        const normalizedMediaWidth = typeof obj.mediaWidth === 'number' && obj.mediaWidth > 0 ? obj.mediaWidth : null;
+        const normalizedMediaHeight = typeof obj.mediaHeight === 'number' && obj.mediaHeight > 0 ? obj.mediaHeight : null;
+
+        return {
+          id: obj.id,
+          type: obj.type,
+          x: obj.x,
+          y: obj.y,
+          width: obj.width,
+          height: obj.height,
+          zIndex: obj.zIndex,
+          rotation: obj.rotation,
+          color: obj.color,
+          text: obj.text,
+          fontSize: obj.fontSize,
+          createdBySessionId: obj.createdBySessionId ?? null,
+          createdAt: obj.createdAt ?? null,
+          updatedAt: obj.updatedAt ?? null,
+          mediaUrl: obj.mediaUrl ?? null,
+          mediaPublicId: obj.mediaPublicId ?? null,
+          mediaResourceType: obj.mediaResourceType ?? null,
+          mediaFormat: obj.mediaFormat ?? null,
+          mimeType: obj.mimeType ?? null,
+          sizeBytes: obj.sizeBytes ?? null,
+          mediaWidth: normalizedMediaWidth,
+          mediaHeight: normalizedMediaHeight,
+          durationMs: obj.durationMs ?? null,
+          mediaCreatedAt: obj.mediaCreatedAt ?? null,
+          ownership: {
+            createdBySessionId: obj.createdBySessionId ?? null,
+          },
+          timestamps: {
+            createdAt: obj.createdAt ?? null,
+            updatedAt: obj.updatedAt ?? null,
+            mediaCreatedAt: obj.mediaCreatedAt ?? null,
+          },
+          media: obj.mediaUrl
+            ? {
+                publicId: obj.mediaPublicId ?? null,
+                secureUrl: obj.mediaUrl,
+                resourceType: obj.mediaResourceType ?? null,
+                width: normalizedMediaWidth,
+                height: normalizedMediaHeight,
+                duration: obj.durationMs ?? null,
+                format: obj.mediaFormat ?? null,
+                bytes: obj.sizeBytes ?? null,
+                mimeType: obj.mimeType ?? null,
+              }
+            : null,
+        };
+      }),
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    downloadBlob(blob, `canvas-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    onNotify?.('✓ JSON exported');
+  }, [downloadBlob, objects, onNotify, room?.id]);
+
   const deleteObjectAndSync = useCallback((objectId: string) => {
     deleteObject(objectId);
     if (selectedObjectId === objectId) {
@@ -160,7 +363,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
 
-      // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note, I=Image, A=Audio
+      // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note.
       switch (e.key.toLowerCase()) {
         case 'r': {
           e.preventDefault();
@@ -182,16 +385,6 @@ export const Canvas: React.FC<CanvasProps> = ({
           createObjectAndSync('sticky-note');
           break;
         }
-        case 'i': {
-          e.preventDefault();
-          createObjectAndSync('image');
-          break;
-        }
-        case 'a': {
-          e.preventDefault();
-          createObjectAndSync('audio');
-          break;
-        }
       }
     };
 
@@ -210,6 +403,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       // Skip if this is our own operation (echo)
       if (pendingOperations.current.has(operationId)) {
         pendingOperations.current.delete(operationId);
+        // Reconcile optimistic local object with server-canonical fields
+        // (timestamps/media normalization) so export matches persisted state.
+        updateObject(object.id, object);
         return;
       }
 
@@ -354,11 +550,77 @@ export const Canvas: React.FC<CanvasProps> = ({
               <span aria-hidden="true">{tool.icon}</span>
             </button>
           ))}
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => openUploadPicker('image')}
+            disabled={uploadInProgress}
+            title="Upload Image"
+            aria-label="Upload image"
+          >
+            <span aria-hidden="true">IMG+</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => openUploadPicker('audio')}
+            disabled={uploadInProgress}
+            title="Upload Audio"
+            aria-label="Upload audio"
+          >
+            <span aria-hidden="true">AUD+</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => openUploadPicker('video')}
+            disabled={uploadInProgress}
+            title="Upload Video"
+            aria-label="Upload video"
+          >
+            <span aria-hidden="true">VID+</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={handleExportPng}
+            title="Export PNG"
+            aria-label="Export PNG"
+          >
+            <span aria-hidden="true">PNG</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={handleExportJson}
+            title="Export JSON"
+            aria-label="Export JSON"
+          >
+            <span aria-hidden="true">JSON</span>
+          </button>
         </div>
         <div className="toolbar-meta">
           <span className={loadingPhase ? 'users-chip users-chip--loading' : 'users-chip'} aria-label={`Users in room: ${participantCount}`}>
             {loadingPhase ? 'Syncing...' : `${participantCount} users`}
           </span>
+          {uploadInProgress && uploadLabel ? (
+            <span className="users-chip users-chip--loading" aria-label="Upload in progress">
+              {uploadLabel} {uploadProgress}%
+            </span>
+          ) : null}
+          {failedUpload ? (
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void runMediaUpload(failedUpload.mediaType, failedUpload.files);
+              }}
+              aria-label="Retry failed upload"
+              title={failedUpload.message}
+            >
+              Retry Upload
+            </button>
+          ) : null}
           {selectedObjectId && (
             <button
               type="button"
@@ -415,6 +677,37 @@ export const Canvas: React.FC<CanvasProps> = ({
           ))}
         </Layer>
       </Stage>
+
+      <input
+        ref={imageUploadInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        hidden
+        onChange={(event) => {
+          void handlePickerChanged('image', event.target.files);
+        }}
+      />
+      <input
+        ref={audioUploadInputRef}
+        type="file"
+        accept="audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/webm"
+        multiple
+        hidden
+        onChange={(event) => {
+          void handlePickerChanged('audio', event.target.files);
+        }}
+      />
+      <input
+        ref={videoUploadInputRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime,video/ogg"
+        multiple
+        hidden
+        onChange={(event) => {
+          void handlePickerChanged('video', event.target.files);
+        }}
+      />
     </div>
   );
 };

@@ -73,7 +73,14 @@ test('object:create stores object and broadcasts created payload with operationI
 
   const roomObjects = await getRoomObjectsFromRepository(repository, roomId);
   assert.equal(roomObjects.length, 1);
-  assert.deepEqual(roomObjects[0], object);
+  assert.equal(roomObjects[0].id, object.id);
+  assert.equal(roomObjects[0].type, object.type);
+  assert.equal(roomObjects[0].x, object.x);
+  assert.equal(roomObjects[0].y, object.y);
+  assert.equal(roomObjects[0].width, object.width);
+  assert.equal(roomObjects[0].height, object.height);
+  assert.equal(roomObjects[0].rotation, object.rotation);
+  assert.equal(roomObjects[0].zIndex, object.zIndex);
 
   assert.equal(io.broadcasts.length, 1);
   assert.equal(io.broadcasts[0].event, 'object:created');
@@ -83,7 +90,10 @@ test('object:create stores object and broadcasts created payload with operationI
     object: Record<string, unknown>;
   };
   assert.equal(payload.operationId, 'op-create-1');
-  assert.deepEqual(payload.object, object);
+  assert.equal(payload.object.id, object.id);
+  assert.equal(payload.object.type, object.type);
+  assert.equal(payload.object.x, object.x);
+  assert.equal(payload.object.y, object.y);
 });
 
 test('object:update mutates existing object and broadcasts update payload with operationId', async () => {

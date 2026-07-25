@@ -181,3 +181,48 @@ export function useRoomUserLeft(callback: (participantId: string) => void): void
     };
   }, [handleUserLeft]);
 }
+
+// Hook to automatically rejoin the current room after socket reconnect.
+// This restores server-side room membership so realtime object updates continue.
+export function useRoomAutoRejoin(): void {
+  const room = useRoomStore(useShallow((s) => s.room));
+  const setRoom = useRoomStore(useShallow((s) => s.setRoom));
+  const setParticipants = useRoomStore(useShallow((s) => s.setParticipants));
+  const setObjects = useCanvasObjectsStore(useShallow((s) => s.setObjects));
+
+  useEffect(() => {
+    if (!room) return;
+
+    const handleReconnect = () => {
+      socket.emit('room:join', { roomId: room.id }, (response: RoomJoinResponse) => {
+        if (response.code) {
+          return;
+        }
+
+        setRoom({
+          id: response.roomId || room.id,
+          shareCode: room.shareCode,
+          title: response.title || room.title,
+        });
+
+        const participants = response.participants || [];
+        setParticipants(participants.map((p) => ({
+          id: p.id as string,
+          roomId: p.roomId as string,
+          displayName: p.displayName as string,
+          joinedAt: p.joinedAt as string,
+          lastSeenAt: p.lastSeenAt as string,
+          isActive: p.isActive as boolean,
+        })));
+
+        const canvasObjects = (response.canvasObjects || []) as Array<Record<string, unknown>>;
+        setObjects(canvasObjects as unknown as CanvasObject[]);
+      });
+    };
+
+    socket.on('connect', handleReconnect);
+    return () => {
+      socket.off('connect', handleReconnect);
+    };
+  }, [room, setObjects, setParticipants, setRoom]);
+}

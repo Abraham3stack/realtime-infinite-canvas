@@ -2,7 +2,20 @@
 
 import { z } from 'zod';
 
-export const ObjectTypeSchema = z.enum(['rectangle', 'circle', 'text', 'sticky-note', 'image', 'audio']);
+export const ObjectTypeSchema = z.enum(['rectangle', 'circle', 'text', 'sticky-note', 'image', 'audio', 'video']);
+
+const MediaMetadataSchema = z.object({
+  mediaUrl: z.string().url().optional(),
+  mediaPublicId: z.string().min(1).optional(),
+  mediaResourceType: z.enum(['image', 'audio', 'video']).optional(),
+  mediaFormat: z.string().optional(),
+  mediaWidth: z.number().int().positive().optional(),
+  mediaHeight: z.number().int().positive().optional(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+  mediaCreatedAt: z.string().datetime().optional(),
+});
 
 const BaseCanvasObjectSchema = z.object({
   id: z.string().min(1),
@@ -13,6 +26,9 @@ const BaseCanvasObjectSchema = z.object({
   height: z.number().positive().finite(),
   zIndex: z.number().int(),
   rotation: z.number().finite(),
+  createdBySessionId: z.string().optional(),
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
 });
 
 export const TextObjectSchema = BaseCanvasObjectSchema.extend({
@@ -41,21 +57,17 @@ export const StickyObjectSchema = BaseCanvasObjectSchema.extend({
 
 export const ImageObjectSchema = BaseCanvasObjectSchema.extend({
   type: z.literal('image'),
-  mediaUrl: z.string().optional(),
-  mediaPublicId: z.string().optional(),
-  mimeType: z.string().optional(),
-  sizeBytes: z.number().int().nonnegative().optional(),
-});
+}).extend(MediaMetadataSchema.shape);
 
 export const AudioObjectSchema = BaseCanvasObjectSchema.extend({
   type: z.literal('audio'),
   text: z.string().optional(),
-  mediaUrl: z.string().optional(),
-  mediaPublicId: z.string().optional(),
-  mimeType: z.string().optional(),
-  sizeBytes: z.number().int().nonnegative().optional(),
-  durationMs: z.number().int().nonnegative().optional(),
-});
+}).extend(MediaMetadataSchema.shape);
+
+export const VideoObjectSchema = BaseCanvasObjectSchema.extend({
+  type: z.literal('video'),
+  text: z.string().optional(),
+}).extend(MediaMetadataSchema.shape);
 
 export const CanvasObjectSchema = z.discriminatedUnion('type', [
   TextObjectSchema,
@@ -64,6 +76,7 @@ export const CanvasObjectSchema = z.discriminatedUnion('type', [
   StickyObjectSchema,
   ImageObjectSchema,
   AudioObjectSchema,
+  VideoObjectSchema,
 ]);
 
 export const CanvasObjectPatchSchema = z.object({
@@ -78,9 +91,17 @@ export const CanvasObjectPatchSchema = z.object({
   fontSize: z.number().optional(),
   mediaUrl: z.string().optional(),
   mediaPublicId: z.string().optional(),
+  mediaResourceType: z.enum(['image', 'audio', 'video']).optional(),
+  mediaFormat: z.string().optional(),
+  mediaWidth: z.number().int().positive().optional(),
+  mediaHeight: z.number().int().positive().optional(),
   mimeType: z.string().optional(),
   sizeBytes: z.number().int().nonnegative().optional(),
   durationMs: z.number().int().nonnegative().optional(),
+  mediaCreatedAt: z.string().datetime().optional(),
+  createdBySessionId: z.string().optional(),
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
 });
 
 export const CanvasSnapshotSchema = z.object({
@@ -94,6 +115,7 @@ export type CircleObject = z.infer<typeof CircleObjectSchema>;
 export type StickyObject = z.infer<typeof StickyObjectSchema>;
 export type ImageObject = z.infer<typeof ImageObjectSchema>;
 export type AudioObject = z.infer<typeof AudioObjectSchema>;
+export type VideoObject = z.infer<typeof VideoObjectSchema>;
 export type CanvasObject = z.infer<typeof CanvasObjectSchema>;
 export type CanvasObjectPatch = z.infer<typeof CanvasObjectPatchSchema>;
 export type CanvasSnapshot = z.infer<typeof CanvasSnapshotSchema>;

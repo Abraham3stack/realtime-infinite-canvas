@@ -23,7 +23,7 @@ interface ObjectDeletePayload {
   objectId: string;
 }
 
-type ClientCanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio';
+type ClientCanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
 
 interface ClientCanvasObject {
   [key: string]: unknown;
@@ -40,9 +40,17 @@ interface ClientCanvasObject {
   fontSize?: number;
   mediaUrl?: string;
   mediaPublicId?: string;
+  mediaResourceType?: 'image' | 'audio' | 'video';
+  mediaFormat?: string;
+  mediaWidth?: number;
+  mediaHeight?: number;
   mimeType?: string;
   sizeBytes?: number;
   durationMs?: number;
+  mediaCreatedAt?: string;
+  createdBySessionId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 function isClientCanvasObject(value: Record<string, unknown>): value is ClientCanvasObject {
@@ -88,6 +96,9 @@ function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
     height: row.height ?? 100,
     rotation: row.rotation ?? 0,
     zIndex: row.zIndex,
+    createdBySessionId: row.createdBySessionId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 
   switch (row.type) {
@@ -129,6 +140,11 @@ function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
         type: 'image',
         mediaUrl: row.mediaUrl ?? '',
         mediaPublicId: row.mediaPublicId ?? '',
+        mediaResourceType: 'image',
+        mediaFormat: row.mediaFormat ?? undefined,
+        mediaWidth: row.mediaWidth ?? undefined,
+        mediaHeight: row.mediaHeight ?? undefined,
+        mediaCreatedAt: row.mediaCreatedAt?.toISOString(),
         mimeType: row.mimeType ?? 'image/png',
         sizeBytes: row.sizeBytes ?? 0,
       };
@@ -140,7 +156,27 @@ function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
         text: row.content ?? 'Audio Placeholder',
         mediaUrl: row.mediaUrl ?? '',
         mediaPublicId: row.mediaPublicId ?? '',
+        mediaResourceType: 'audio',
+        mediaFormat: row.mediaFormat ?? undefined,
+        mediaCreatedAt: row.mediaCreatedAt?.toISOString(),
         mimeType: row.mimeType ?? 'audio/wav',
+        sizeBytes: row.sizeBytes ?? 0,
+        durationMs: row.durationMs ?? 0,
+      };
+    }
+    case 'video': {
+      return {
+        ...base,
+        type: 'video',
+        text: row.content ?? 'Video',
+        mediaUrl: row.mediaUrl ?? '',
+        mediaPublicId: row.mediaPublicId ?? '',
+        mediaResourceType: 'video',
+        mediaFormat: row.mediaFormat ?? undefined,
+        mediaWidth: row.mediaWidth ?? undefined,
+        mediaHeight: row.mediaHeight ?? undefined,
+        mediaCreatedAt: row.mediaCreatedAt?.toISOString(),
+        mimeType: row.mimeType ?? 'video/mp4',
         sizeBytes: row.sizeBytes ?? 0,
         durationMs: row.durationMs ?? 0,
       };
@@ -223,6 +259,11 @@ function toCreateData(roomId: string, sessionId: string, object: ClientCanvasObj
         type: 'image',
         mediaUrl: object.mediaUrl ?? '',
         mediaPublicId: object.mediaPublicId,
+        mediaResourceType: object.mediaResourceType ?? 'image',
+        mediaFormat: object.mediaFormat,
+        mediaWidth: object.mediaWidth,
+        mediaHeight: object.mediaHeight,
+        mediaCreatedAt: object.mediaCreatedAt ? new Date(object.mediaCreatedAt) : undefined,
         mimeType: object.mimeType ?? 'image/png',
         sizeBytes: object.sizeBytes,
       };
@@ -233,7 +274,26 @@ function toCreateData(roomId: string, sessionId: string, object: ClientCanvasObj
         content: object.text ?? 'Audio Placeholder',
         mediaUrl: object.mediaUrl ?? '',
         mediaPublicId: object.mediaPublicId,
+        mediaResourceType: object.mediaResourceType ?? 'audio',
+        mediaFormat: object.mediaFormat,
+        mediaCreatedAt: object.mediaCreatedAt ? new Date(object.mediaCreatedAt) : undefined,
         mimeType: object.mimeType ?? 'audio/wav',
+        sizeBytes: object.sizeBytes,
+        durationMs: object.durationMs,
+      };
+    case 'video':
+      return {
+        ...common,
+        type: 'video',
+        content: object.text ?? 'Video',
+        mediaUrl: object.mediaUrl ?? '',
+        mediaPublicId: object.mediaPublicId,
+        mediaResourceType: object.mediaResourceType ?? 'video',
+        mediaFormat: object.mediaFormat,
+        mediaWidth: object.mediaWidth,
+        mediaHeight: object.mediaHeight,
+        mediaCreatedAt: object.mediaCreatedAt ? new Date(object.mediaCreatedAt) : undefined,
+        mimeType: object.mimeType ?? 'video/mp4',
         sizeBytes: object.sizeBytes,
         durationMs: object.durationMs,
       };
@@ -265,9 +325,14 @@ function buildUpdateData(existing: PrismaCanvasObject, updates: Record<string, u
     if (typeof updates.color === 'string') data.backgroundColor = updates.color;
   }
 
-  if (existing.type === 'image' || existing.type === 'audio') {
+  if (existing.type === 'image' || existing.type === 'audio' || existing.type === 'video') {
     if (typeof updates.mediaUrl === 'string') data.mediaUrl = updates.mediaUrl;
     if (typeof updates.mediaPublicId === 'string') data.mediaPublicId = updates.mediaPublicId;
+    if (typeof updates.mediaResourceType === 'string') data.mediaResourceType = updates.mediaResourceType;
+    if (typeof updates.mediaFormat === 'string') data.mediaFormat = updates.mediaFormat;
+    if (typeof updates.mediaWidth === 'number') data.mediaWidth = Math.trunc(updates.mediaWidth);
+    if (typeof updates.mediaHeight === 'number') data.mediaHeight = Math.trunc(updates.mediaHeight);
+    if (typeof updates.mediaCreatedAt === 'string') data.mediaCreatedAt = new Date(updates.mediaCreatedAt);
     if (typeof updates.mimeType === 'string') data.mimeType = updates.mimeType;
     if (typeof updates.sizeBytes === 'number') data.sizeBytes = Math.trunc(updates.sizeBytes);
   }
@@ -276,8 +341,12 @@ function buildUpdateData(existing: PrismaCanvasObject, updates: Record<string, u
     data.content = updates.text;
   }
 
-  if (existing.type === 'audio' && typeof updates.durationMs === 'number') {
+  if ((existing.type === 'audio' || existing.type === 'video') && typeof updates.durationMs === 'number') {
     data.durationMs = Math.trunc(updates.durationMs);
+  }
+
+  if (existing.type === 'video' && typeof updates.text === 'string') {
+    data.content = updates.text;
   }
 
   return data;
@@ -350,9 +419,19 @@ export function createInMemoryObjectRepository(): ObjectRepository {
         textColor: data.textColor ?? null,
         mediaUrl: data.mediaUrl ?? null,
         mediaPublicId: data.mediaPublicId ?? null,
+        mediaResourceType: data.mediaResourceType ?? null,
+        mediaFormat: data.mediaFormat ?? null,
+        mediaWidth: data.mediaWidth ?? null,
+        mediaHeight: data.mediaHeight ?? null,
         mimeType: data.mimeType ?? null,
         sizeBytes: data.sizeBytes ?? null,
         durationMs: data.durationMs ?? null,
+        mediaCreatedAt:
+          data.mediaCreatedAt instanceof Date
+            ? data.mediaCreatedAt
+            : typeof data.mediaCreatedAt === 'string'
+              ? new Date(data.mediaCreatedAt)
+              : null,
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
@@ -388,9 +467,15 @@ export function createInMemoryObjectRepository(): ObjectRepository {
           mediaUrl: typeof data.mediaUrl === 'string' ? data.mediaUrl : existing.mediaUrl,
           mediaPublicId:
             typeof data.mediaPublicId === 'string' ? data.mediaPublicId : existing.mediaPublicId,
+          mediaResourceType:
+            typeof data.mediaResourceType === 'string' ? data.mediaResourceType : existing.mediaResourceType,
+          mediaFormat: typeof data.mediaFormat === 'string' ? data.mediaFormat : existing.mediaFormat,
+          mediaWidth: typeof data.mediaWidth === 'number' ? data.mediaWidth : existing.mediaWidth,
+          mediaHeight: typeof data.mediaHeight === 'number' ? data.mediaHeight : existing.mediaHeight,
           mimeType: typeof data.mimeType === 'string' ? data.mimeType : existing.mimeType,
           sizeBytes: typeof data.sizeBytes === 'number' ? data.sizeBytes : existing.sizeBytes,
           durationMs: typeof data.durationMs === 'number' ? data.durationMs : existing.durationMs,
+          mediaCreatedAt: data.mediaCreatedAt instanceof Date ? data.mediaCreatedAt : existing.mediaCreatedAt,
           updatedAt: new Date(),
         };
 

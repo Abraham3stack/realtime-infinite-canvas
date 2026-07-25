@@ -6,6 +6,7 @@ import { TextShape } from './shapes/TextShape.js';
 import { StickyNoteShape } from './shapes/StickyNoteShape.js';
 import { ImageShape } from './shapes/ImageShape.js';
 import { AudioShape } from './shapes/AudioShape.js';
+import { VideoShape } from './shapes/VideoShape.js';
 
 interface ObjectRendererProps {
   object: CanvasObject;
@@ -28,6 +29,7 @@ const shapeComponentMap: Record<
   'sticky-note': StickyNoteShape,
   image: ImageShape,
   audio: AudioShape,
+  video: VideoShape,
 };
 
 /**

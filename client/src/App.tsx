@@ -1,7 +1,7 @@
 import { FC, useMemo, useState } from 'react';
 import { useConnectionStatus } from './hooks/useConnectionStatus.js';
 import { useCreateSession } from './hooks/useAuth.js';
-import { useCreateRoom, useJoinRoom, useLeaveRoom, useRoomUserJoined, useRoomUserLeft } from './hooks/useRoom.js';
+import { useCreateRoom, useJoinRoom, useLeaveRoom, useRoomAutoRejoin, useRoomUserJoined, useRoomUserLeft } from './hooks/useRoom.js';
 import { useConnectionToasts, useRoomHydrationLoading, useToast, type RoomLoadingPhase } from './hooks/useUiStates.js';
 import { useRoomStore } from './store/room.js';
 import { Canvas } from './components/Canvas.js';
@@ -59,6 +59,7 @@ const App: FC = () => {
   const connectedCount = useMemo(() => participants.filter((participant) => participant.isActive).length, [participants]);
 
   useConnectionToasts(status, showToast);
+  useRoomAutoRejoin();
 
   const copyToClipboard = async (value: string, label: string, loadingKey: Exclude<CopyLoading, null>) => {
     try {
@@ -281,6 +282,9 @@ const App: FC = () => {
               loadingPhase={isRoomLoading && roomLoadingPhase !== 'idle' ? roomLoadingPhase : null}
               loadingCopy={roomLoadingPhase === 'idle' ? null : ROOM_LOADING_COPY[roomLoadingPhase]}
               onObjectDeleted={() => showToast('✓ Object deleted')}
+              onNotify={showToast}
+              sessionToken={session?.sessionToken}
+              sessionId={session?.sessionId}
             />
           </main>
         </div>

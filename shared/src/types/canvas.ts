@@ -1,6 +1,6 @@
 // Canvas object types (current realtime runtime contract)
 
-export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio';
+export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
 
 export interface CanvasObject {
   id: string;
@@ -16,9 +16,17 @@ export interface CanvasObject {
   fontSize?: number;
   mediaUrl?: string;
   mediaPublicId?: string;
+  mediaResourceType?: 'image' | 'audio' | 'video';
+  mediaFormat?: string;
+  mediaWidth?: number;
+  mediaHeight?: number;
   mimeType?: string;
   sizeBytes?: number;
   durationMs?: number;
+  mediaCreatedAt?: string;
+  createdBySessionId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CanvasObjectPatch {
@@ -33,9 +41,17 @@ export interface CanvasObjectPatch {
   fontSize?: number;
   mediaUrl?: string;
   mediaPublicId?: string;
+  mediaResourceType?: 'image' | 'audio' | 'video';
+  mediaFormat?: string;
+  mediaWidth?: number;
+  mediaHeight?: number;
   mimeType?: string;
   sizeBytes?: number;
   durationMs?: number;
+  mediaCreatedAt?: string;
+  createdBySessionId?: string;
+  createdAt?: string;
+  updatedAt?: string;
   [key: string]: unknown;
 }
 

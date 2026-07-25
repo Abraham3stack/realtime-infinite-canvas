@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 // Canvas object type definitions
-export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio';
+export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
 
 export interface CanvasObject {
   id: string;
@@ -16,10 +16,36 @@ export interface CanvasObject {
   fontSize?: number;
   mediaUrl?: string;
   mediaPublicId?: string;
+  mediaResourceType?: 'image' | 'audio' | 'video';
+  mediaFormat?: string;
+  mediaWidth?: number;
+  mediaHeight?: number;
   mimeType?: string;
   sizeBytes?: number;
   durationMs?: number;
+  mediaCreatedAt?: string;
+  createdBySessionId?: string;
+  createdAt?: string;
+  updatedAt?: string;
   zIndex: number;
+}
+
+export interface MediaObjectInput {
+  type: 'image' | 'audio' | 'video';
+  x: number;
+  y: number;
+  mediaUrl: string;
+  mediaPublicId: string;
+  mediaResourceType: 'image' | 'audio' | 'video';
+  mediaFormat: string;
+  mediaWidth?: number;
+  mediaHeight?: number;
+  mimeType: string;
+  sizeBytes: number;
+  durationMs?: number;
+  mediaCreatedAt: string;
+  text?: string;
+  createdBySessionId?: string;
 }
 
 export interface CanvasObjectsState {
@@ -28,6 +54,7 @@ export interface CanvasObjectsState {
 
   // CRUD operations
   addObject: (type: CanvasObjectType, x: number, y: number) => string;
+  addMediaObject: (input: MediaObjectInput) => string;
   updateObject: (id: string, updates: Partial<CanvasObject>) => void;
   deleteObject: (id: string) => void;
   getObject: (id: string) => CanvasObject | undefined;
@@ -47,13 +74,6 @@ export interface CanvasObjectsState {
 // Factory for default object properties by type
 const getDefaultProperties = (type: CanvasObjectType) => {
   const baseSize = 100;
-  // Phase 2 uses local placeholders. Phase 3 will replace these with uploaded media URLs.
-  const imagePlaceholder =
-    'data:image/svg+xml;utf8,' +
-    encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220"><rect width="100%" height="100%" fill="#e2e8f0"/><rect x="24" y="24" width="272" height="172" rx="8" fill="#cbd5e1"/><circle cx="102" cy="94" r="18" fill="#94a3b8"/><path d="M66 170l48-46 42 34 40-50 58 62z" fill="#64748b"/><text x="160" y="204" text-anchor="middle" font-size="16" fill="#334155">Image</text></svg>'
-    );
-  const audioPlaceholder = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
   const defaults: Record<CanvasObjectType, Partial<CanvasObject>> = {
     rectangle: {
       width: baseSize,
@@ -83,21 +103,18 @@ const getDefaultProperties = (type: CanvasObjectType) => {
       width: 220,
       height: 160,
       color: '#cbd5e1',
-      mediaUrl: imagePlaceholder,
-      mediaPublicId: 'phase2-placeholder-image',
-      mimeType: 'image/svg+xml',
-      sizeBytes: imagePlaceholder.length,
     },
     audio: {
       width: 220,
       height: 80,
       color: '#dbeafe',
-      text: 'Audio Placeholder',
-      mediaUrl: audioPlaceholder,
-      mediaPublicId: 'phase2-placeholder-audio',
-      mimeType: 'audio/wav',
-      sizeBytes: audioPlaceholder.length,
-      durationMs: 1000,
+      text: 'Audio',
+    },
+    video: {
+      width: 260,
+      height: 180,
+      color: '#dbeafe',
+      text: 'Video',
     },
   };
   return defaults[type];
@@ -131,6 +148,8 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
       mimeType: defaults.mimeType,
       sizeBytes: defaults.sizeBytes,
       durationMs: defaults.durationMs,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       zIndex: state.nextZIndex,
     };
 
@@ -142,10 +161,53 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
     return id;
   },
 
+  addMediaObject: (input) => {
+    const id = generateId();
+    const state = get();
+    const now = new Date().toISOString();
+
+    const fallbackWidth = input.type === 'audio' ? 240 : input.type === 'video' ? 280 : 220;
+    const fallbackHeight = input.type === 'audio' ? 90 : input.type === 'video' ? 180 : 160;
+
+    const object: CanvasObject = {
+      id,
+      type: input.type,
+      x: input.x,
+      y: input.y,
+      width: input.mediaWidth ?? fallbackWidth,
+      height: input.mediaHeight ?? fallbackHeight,
+      rotation: 0,
+      color: input.type === 'audio' ? '#dbeafe' : '#e2e8f0',
+      text: input.text,
+      mediaUrl: input.mediaUrl,
+      mediaPublicId: input.mediaPublicId,
+      mediaResourceType: input.mediaResourceType,
+      mediaFormat: input.mediaFormat,
+      mediaWidth: input.mediaWidth,
+      mediaHeight: input.mediaHeight,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      durationMs: input.durationMs,
+      mediaCreatedAt: input.mediaCreatedAt,
+      createdBySessionId: input.createdBySessionId,
+      createdAt: now,
+      updatedAt: now,
+      zIndex: state.nextZIndex,
+    };
+
+    set((current) => ({
+      objects: [...current.objects, object],
+      nextZIndex: current.nextZIndex + 1,
+    }));
+
+    return id;
+  },
+
   updateObject: (id, updates) => {
+    const nextUpdatedAt = updates.updatedAt ?? new Date().toISOString();
     set((state) => ({
       objects: state.objects.map((obj) =>
-        obj.id === id ? { ...obj, ...updates } : obj
+        obj.id === id ? { ...obj, ...updates, updatedAt: nextUpdatedAt } : obj
       ),
     }));
   },

@@ -21,6 +21,7 @@ export {
   StickyObjectSchema,
   ImageObjectSchema,
   AudioObjectSchema,
+  VideoObjectSchema,
   CanvasObjectSchema,
   CanvasObjectPatchSchema,
   CanvasSnapshotSchema,

@@ -486,6 +486,14 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toolbar-meta .ghost-btn {
+  margin-top: 0;
+  height: 36px;
+  padding: 0 0.7rem;
 }
 
 .users-chip {

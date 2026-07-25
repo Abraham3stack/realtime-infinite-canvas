@@ -161,7 +161,7 @@ export interface MediaRegisterPayload {
   roomId: string;
   clientTs: Date;
   objectId: string;
-  mediaType: 'image' | 'audio';
+  mediaType: 'image' | 'audio' | 'video';
   mediaUrl: string;
   mediaPublicId: string;
   mimeType: string;

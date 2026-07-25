@@ -137,8 +137,7 @@ Stores canonical object state for each item rendered on the collaborative canvas
 - id: unique identifier
 - roomId: foreign key to Room
 - createdBySessionId: foreign key to GuestSession
-- type: object type enum (text, shape, sticky, image, audio)
-- payloadJson: type-specific object data
+- type: object type enum (text, shape, sticky, image, audio, video)
 - x: position x
 - y: position y
 - width: optional width
@@ -146,6 +145,16 @@ Stores canonical object state for each item rendered on the collaborative canvas
 - rotation: optional rotation angle
 - zIndex: layering order
 - version: monotonic version for conflict handling
+- mediaUrl: Cloudinary secure URL (image/audio/video)
+- mediaPublicId: Cloudinary public identifier
+- mediaResourceType: Cloudinary resource type
+- mediaFormat: detected media format
+- mediaWidth: optional media width
+- mediaHeight: optional media height
+- mimeType: uploaded MIME type
+- sizeBytes: uploaded file size
+- durationMs: optional duration for audio/video
+- mediaCreatedAt: Cloudinary creation timestamp
 - deletedAt: optional soft-delete timestamp
 - createdAt: creation timestamp
 - updatedAt: update timestamp
@@ -154,7 +163,6 @@ Stores canonical object state for each item rendered on the collaborative canvas
 
 - roomId required
 - type must be one of accepted object enums
-- payloadJson required and validated against object type
 - version required and incremented on each mutation
 
 ---
@@ -187,14 +195,14 @@ Tracks Cloudinary media metadata separately for lifecycle management and cleanup
 - roomId: foreign key to Room
 - objectId: optional foreign key to CanvasObject
 - uploadedBySessionId: foreign key to GuestSession
-- mediaType: enum (image, audio)
+- mediaType: enum (image, audio, video)
 - url: Cloudinary delivery URL
 - publicId: Cloudinary public identifier
 - mimeType: MIME type
 - sizeBytes: file size in bytes
-- durationMs: optional duration for audio
-- width: optional width for image
-- height: optional height for image
+- durationMs: optional duration for audio/video
+- width: optional width for image/video
+- height: optional height for image/video
 - createdAt: upload timestamp
 - deletedAt: optional soft-delete timestamp
 
@@ -209,11 +217,11 @@ Tracks Cloudinary media metadata separately for lifecycle management and cleanup
 ## Notes on Constraints and Simplicity (MVP)
 
 - Use soft delete fields where practical to reduce accidental data loss during live collaboration.
-- Keep object type details in payloadJson for faster iteration.
+- Keep media binaries in Cloudinary and only metadata in PostgreSQL.
 - Avoid creating per-object subtype tables during MVP.
 - Avoid role/permission tables until requirements demand them.
 - RoomEvent table is excluded from MVP (reserved for time travel bonus feature).
-- MediaAsset is optional for MVP; media URLs can be stored directly in CanvasObject payloadJson if storage overhead permits.
+- MediaAsset is optional for MVP; implemented metadata currently lives directly on CanvasObject columns.
 
 ## Migration and Evolution Guidance
 

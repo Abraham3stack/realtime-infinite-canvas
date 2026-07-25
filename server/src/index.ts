@@ -4,6 +4,8 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import { registerSocketHandlers } from './socket/index.js';
 import authRouter from './routes/auth.js';
+import mediaRouter from './routes/media.js';
+import { requireSession } from './middleware/requireSession.js';
 
 // Fail fast on missing DATABASE_URL so the error is obvious during startup
 // rather than surfacing as an opaque Prisma connection failure on first request.
@@ -40,6 +42,7 @@ app.get('/health', (_req, res) => {
 
 // Guest authentication — create and validate lightweight session tokens.
 app.use('/auth', authRouter);
+app.use('/media', requireSession, mediaRouter);
 
 // Wrap Express in a plain Node HTTP server. Socket.IO attaches to the same port
 // and handles the WebSocket upgrade from the HTTP connection automatically.

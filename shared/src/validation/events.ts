@@ -169,7 +169,7 @@ export const MediaRegisterPayloadSchema = z.object({
   roomId: z.string().uuid(),
   clientTs: z.date(),
   objectId: z.string().uuid(),
-  mediaType: z.enum(['image', 'audio']),
+  mediaType: z.enum(['image', 'audio', 'video']),
   mediaUrl: z.string().url(),
   mediaPublicId: z.string().min(1),
   mimeType: z.string(),

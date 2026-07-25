@@ -26,6 +26,7 @@ export const ImageShape: React.FC<ShapeProps> = ({ object, selected, onMove, onR
     }
 
     const img = new window.Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => setImage(img);
     img.onerror = () => setImage(null);
     img.src = object.mediaUrl;

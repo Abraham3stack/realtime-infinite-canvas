@@ -88,7 +88,7 @@ model RoomParticipant {
 model CanvasObject {
   id                 String    @id @default(uuid())
   roomId             String
-  type               String    // 'text' | 'shape' | 'sticky' | 'image' | 'audio'
+  type               String    // 'text' | 'shape' | 'sticky' | 'image' | 'audio' | 'video'
   x                  Float
   y                  Float
   zIndex             Int
@@ -114,12 +114,17 @@ model CanvasObject {
   backgroundColor String?
   textColor       String?
 
-  // Media (Image & Audio)
+  // Media (Image, Audio, Video)
   mediaUrl      String?
   mediaPublicId String?
+  mediaResourceType String?
+  mediaFormat   String?
+  mediaWidth    Int?
+  mediaHeight   Int?
   mimeType      String?
   sizeBytes     Int?
   durationMs    Int?
+  mediaCreatedAt DateTime?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

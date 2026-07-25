@@ -215,7 +215,7 @@ Client -> Server
 
 - operationId unique for participant session scope
 - roomId required
-- object type allowed enum: text, shape, sticky, image, audio
+- object type allowed enum: text, shape, sticky, image, audio, video
 - payload schema must match object type
 
 ### Expected Response
@@ -375,12 +375,12 @@ Client -> Server
 - roomId
 - clientTs
 - objectId
-- mediaType: image or audio
+- mediaType: image, audio, or video
 - mediaUrl
 - mediaPublicId
 - mimeType
 - sizeBytes
-- durationMs (required for audio)
+- durationMs (required for audio/video when known)
 
 ### Validation
 
