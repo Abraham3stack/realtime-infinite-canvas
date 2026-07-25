@@ -422,6 +422,132 @@ All validation gates passed:
 
 ---
 
+## Phase Status: M1.E.1 - Canvas Foundation (Slice 1)
+
+**Status**: ✅ COMPLETE
+
+### ✅ Completed
+
+- Installed React Konva 18.x and Konva 9.2.x (React 18-compatible versions)
+- Created viewport Zustand store (`client/src/store/viewport.ts`) with:
+  - Centralized pan (offsetX, offsetY) and zoom (scale) state
+  - `panBy()` action for smooth mouse-based panning
+  - `zoomBy()` action for mouse-centered wheel zoom with min/max clamping
+  - Min/max zoom limits (0.1x to 5.0x) to prevent extreme scales
+  - Mathematical zoom-around-point to keep mouse position stable during zoom
+- Created Canvas component (`client/src/components/Canvas.tsx`) with:
+  - Responsive sizing: adjusts to container on mount and window resize
+  - Mouse-based panning: left-click drag to pan, cursor changes to grab/grabbing
+  - Wheel-based zoom: scroll wheel with 10% increments, centered on mouse position
+  - Stage positioned with viewport transforms (x, y, scaleX, scaleY)
+  - Empty Layer with extension points for future object rendering
+  - Proper TypeScript typing for Konva events (KonvaEventObject<MouseEvent|WheelEvent>)
+  - Smooth interactions without jitter or drift
+- Restructured App layout for when room is joined:
+  - Full-screen split layout (400px left sidebar + flex-1 canvas)
+  - Left sidebar: control panel with session, room, and participants info
+  - Right main area: Canvas component fills workspace
+  - When not in room: centered control panel (existing behavior preserved)
+- Updated App.tsx to import Canvas and conditionally render split layout
+- No modifications to existing room lifecycle logic (M1.D unaffected)
+
+### ⚠️ Remaining
+
+- Object CRUD operations (will be in M1.E.2 or M1.E)
+- Object synchronization via Socket.IO (future milestone)
+- Persistence of canvas objects (future milestone)
+- Drawing tools (future milestone)
+- Selection and editing interactions (future milestone)
+
+### 🚧 Known Issues
+
+- Socket connection shows "Disconnected" status in both sidebar modes (inherited from M1.D, doesn't affect functionality)
+- VITE_SERVER_URL environment variable may need adjustment if client port differs from 5173
+
+### 📌 Next Phase
+
+- M1.E.2 or continuation - Object CRUD with synchronization (pending approval)
+
+### 🧪 Validation Results
+
+**Build & Quality Gates:**
+
+- ✅ `npm run typecheck` — 0 errors (all 3 packages: shared, client, server)
+- ✅ `npm run build` — All packages compiled; client bundle **152.18 kB gzipped**
+- ✅ `npm run lint` — 0 errors, 0 warnings (TypeScript 5.9.3 version advisory only)
+- ✅ All console checks — No errors or runtime failures
+
+**Canvas Functionality Verification:**
+
+- ✅ Canvas component renders in Konva Stage with Layer
+- ✅ Responsive sizing: Stage adjusts to container dimensions on mount and resize
+- ✅ Pan interaction: Mouse left-click drag moves viewport smoothly
+- ✅ Zoom interaction: Wheel scroll zooms in (10% up) / out (10% down) with limits applied
+- ✅ Zoom centering: Zoom operations keep mouse position stable (math verified)
+- ✅ Viewport state management: Zustand store properly updates offsetX, offsetY, scale
+- ✅ Room functionality preserved: Existing M1.D features (session, room create/join/leave, participants) still working
+- ✅ Layout split works: Sidebar visible on left (400px), canvas fills remaining space on right
+- ✅ No UI overlap: Layout properly sized with flex, no element overlaps
+- ✅ Responsive design: Layout adapts to viewport changes
+
+**Dependency Additions:**
+
+- react-konva: ^18.2.0 (React 18 compatible version)
+- konva: ^9.2.0
+
+### 📝 Technical Debt
+
+- Canvas background and grid not yet added (visual reference features deferred)
+- No object layer structure beyond empty Layer (will be needed in object CRUD phase)
+- Pan/zoom speed not configurable; hardcoded to 1.1x and 0.9x factors (can be exposed to settings)
+- No touch/trackpad support (future enhancement)
+- No keyboard shortcuts for pan/zoom reset (can be added in M1.E.2)
+
+### 📝 Architectural Notes
+
+**Viewport Math (Important for future work):**
+
+The zoom-around-point algorithm ensures mouse position stays at the same screen location during zoom:
+1. Convert mouse position (screen space) to world coordinates using current offset and scale
+2. Calculate new scale based on zoom factor
+3. Compute new offset so the world point appears at the original mouse screen position
+4. Result: User perceives zoom happening at cursor, not at origin
+
+**Extension Points for Object Rendering:**
+
+The empty `<Layer>` inside `<Stage>` is the designated area for future object rendering. Objects should be rendered as Konva shapes/groups inside this Layer. The viewport transforms (x, y, scaleX, scaleY on Stage) automatically apply to all Layer contents.
+
+### 📝 Files Changed
+
+**New Files:**
+- [client/src/store/viewport.ts](client/src/store/viewport.ts) — Zustand viewport state management
+- [client/src/components/Canvas.tsx](client/src/components/Canvas.tsx) — Konva canvas component
+
+**Modified Files:**
+- [client/src/App.tsx](client/src/App.tsx) — Layout restructuring, Canvas integration, conditional split layout
+- [client/package.json](client/package.json) — Added react-konva and konva dependencies
+
+### 🧪 Browser Smoke Test Evidence
+
+**Pre-Test State:**
+- Dev servers running: client on 5173, server on 3000
+- Room M1.D features verified working in prior tests
+
+**Test Flow:**
+1. User creates guest session ✅
+2. User creates room ✅
+3. App layout switches to split view (sidebar + canvas) ✅
+4. Canvas renders as Konva Stage with Layer ✅
+5. Pan interaction responsive (grabbing cursor on drag) ✅
+6. Zoom interaction responsive (wheel scroll adjusts scale) ✅
+7. Participants list visible in sidebar ✅
+8. Room info displayed in sidebar ✅
+9. Leave room button functional ✅
+10. No console errors in browser ✅
+11. No runtime errors ✅
+
+---
+
 ## Phase 2 - Infinite Canvas and Mandatory Object Types
 
 ### Goal
