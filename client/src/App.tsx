@@ -1,7 +1,8 @@
-import { FC, useEffect, useMemo, useRef, useState } from 'react';
+import { FC, useMemo, useState } from 'react';
 import { useConnectionStatus } from './hooks/useConnectionStatus.js';
 import { useCreateSession } from './hooks/useAuth.js';
 import { useCreateRoom, useJoinRoom, useLeaveRoom, useRoomUserJoined, useRoomUserLeft } from './hooks/useRoom.js';
+import { useConnectionToasts, useRoomHydrationLoading, useToast, type RoomLoadingPhase } from './hooks/useUiStates.js';
 import { useRoomStore } from './store/room.js';
 import { Canvas } from './components/Canvas.js';
 import { LoadingButton } from './components/ui/LoadingButton.js';
@@ -11,7 +12,6 @@ import { StatusBadge } from './components/ui/StatusBadge.js';
 
 type ActionLoading = 'create-session' | 'create-room' | 'join-room' | 'leave-room' | null;
 type CopyLoading = 'room-id' | 'share-code' | null;
-type RoomLoadingPhase = 'idle' | 'connecting' | 'hydrating' | 'syncing';
 
 const ROOM_LOADING_COPY: Record<Exclude<RoomLoadingPhase, 'idle'>, { title: string; sub: string }> = {
   connecting: {
@@ -46,44 +46,21 @@ const App: FC = () => {
   const [roomInput, setRoomInput] = useState('');
   const [roomIdOrCode, setRoomIdOrCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<ActionLoading>(null);
   const [copyLoading, setCopyLoading] = useState<CopyLoading>(null);
-  const [roomLoadingPhase, setRoomLoadingPhase] = useState<RoomLoadingPhase>('idle');
-  const [showRoomSkeleton, setShowRoomSkeleton] = useState(false);
-  const previousStatus = useRef(status);
-  const hasStatusBootstrapped = useRef(false);
+  const { toast, showToast } = useToast();
+  const {
+    phase: roomLoadingPhase,
+    showSkeleton: showRoomSkeleton,
+    isLoading: isRoomLoading,
+    beginLoading: beginRoomLoading,
+    completeLoading: completeRoomLoading,
+    resetLoading: resetRoomLoading,
+  } = useRoomHydrationLoading();
 
   const connectedCount = useMemo(() => participants.filter((participant) => participant.isActive).length, [participants]);
-  const isRoomLoading = roomLoadingPhase !== 'idle';
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 1800);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message: string) => {
-    setToast(message);
-  };
-
-  const beginRoomLoading = () => {
-    setShowRoomSkeleton(true);
-    setRoomLoadingPhase('connecting');
-  };
-
-  const completeRoomLoading = () => {
-    setRoomLoadingPhase('hydrating');
-
-    window.setTimeout(() => {
-      setRoomLoadingPhase('syncing');
-    }, 180);
-
-    window.setTimeout(() => {
-      setRoomLoadingPhase('idle');
-      setShowRoomSkeleton(false);
-    }, 900);
-  };
+  useConnectionToasts(status, showToast);
 
   const copyToClipboard = async (value: string, label: string, loadingKey: Exclude<CopyLoading, null>) => {
     try {
@@ -96,37 +73,6 @@ const App: FC = () => {
       setCopyLoading(null);
     }
   };
-
-  useEffect(() => {
-    if (!hasStatusBootstrapped.current) {
-      hasStatusBootstrapped.current = true;
-      previousStatus.current = status;
-      return;
-    }
-
-    const prev = previousStatus.current;
-    if (prev === status) return;
-
-    if ((status === 'disconnected' || status === 'error') && (prev === 'connected' || prev === 'connecting')) {
-      showToast('✓ Connection lost');
-    }
-
-    if (status === 'connecting' && prev !== 'connecting') {
-      showToast('✓ Reconnecting...');
-    }
-
-    if (status === 'connected' && (prev === 'disconnected' || prev === 'error' || prev === 'connecting')) {
-      showToast(prev === 'connecting' ? '✓ Reconnected' : '✓ Connection restored');
-    }
-
-    previousStatus.current = status;
-  }, [status]);
-
-  useEffect(() => {
-    if (!room && roomLoadingPhase === 'idle') {
-      setShowRoomSkeleton(false);
-    }
-  }, [room, roomLoadingPhase]);
 
   // Listen for participant joins
   useRoomUserJoined((participant) => {
@@ -172,8 +118,7 @@ const App: FC = () => {
       showToast('✓ Room created');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create room');
-      setRoomLoadingPhase('idle');
-      setShowRoomSkeleton(false);
+      resetRoomLoading();
     } finally {
       setLoadingAction(null);
     }
@@ -200,8 +145,7 @@ const App: FC = () => {
       setRoomIdOrCode('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join room');
-      setRoomLoadingPhase('idle');
-      setShowRoomSkeleton(false);
+      resetRoomLoading();
     } finally {
       setLoadingAction(null);
     }
@@ -336,7 +280,7 @@ const App: FC = () => {
           <main className="canvas-layout" aria-label="Canvas workspace">
             <Canvas
               participantCount={participants.length}
-              loadingPhase={isRoomLoading ? roomLoadingPhase : null}
+              loadingPhase={isRoomLoading && roomLoadingPhase !== 'idle' ? roomLoadingPhase : null}
               loadingCopy={roomLoadingPhase === 'idle' ? null : ROOM_LOADING_COPY[roomLoadingPhase]}
               onObjectDeleted={() => showToast('✓ Object deleted')}
             />
