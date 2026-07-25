@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../db/prisma.js';
+import { withNeonColdStartRetry } from '../db/neonRetry.js';
 import { validateBody } from '../middleware/validate.js';
 import { ErrorCodes } from '@realtime-canvas/shared';
 
@@ -30,12 +31,14 @@ router.post('/guest', validateBody(CreateGuestSchema), async (req, res) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Atomic: if session creation fails, the user record is also rolled back.
-    const [user, session] = await prisma.$transaction(async (tx) => {
-      const u = await tx.guestUser.create({ data: { displayName } });
-      const s = await tx.guestSession.create({
-        data: { userId: u.id, sessionTokenHash: tokenHash, expiresAt },
+    const [user, session] = await withNeonColdStartRetry(async () => {
+      return prisma.$transaction(async (tx) => {
+        const u = await tx.guestUser.create({ data: { displayName } });
+        const s = await tx.guestSession.create({
+          data: { userId: u.id, sessionTokenHash: tokenHash, expiresAt },
+        });
+        return [u, s] as const;
       });
-      return [u, s] as const;
     });
 
     res.status(201).json({

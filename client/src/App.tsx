@@ -14,7 +14,13 @@ const STATUS_COLOR: Record<string, string> = {
 
 const App: FC = () => {
   const { status, error: connError } = useConnectionStatus();
-  const { session, loading: sessionLoading, error: sessionError, createSession } = useCreateSession();
+  const {
+    session,
+    loading: sessionLoading,
+    wakingDatabase,
+    error: sessionError,
+    createSession,
+  } = useCreateSession();
   const createRoom = useCreateRoom();
   const joinRoom = useJoinRoom();
   const leaveRoom = useLeaveRoom();
@@ -255,12 +261,14 @@ const App: FC = () => {
                   placeholder="Enter display name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
+                  disabled={sessionLoading}
                   style={{
                     flex: 1,
                     padding: '0.5rem',
                     border: '1px solid #e2e8f0',
                     borderRadius: '4px',
                     fontSize: '0.875rem',
+                    opacity: sessionLoading ? 0.7 : 1,
                   }}
                 />
                 <button
@@ -276,9 +284,33 @@ const App: FC = () => {
                     opacity: sessionLoading ? 0.5 : 1,
                   }}
                 >
-                  {sessionLoading ? 'Creating...' : 'Create Session'}
+                  {sessionLoading ? (wakingDatabase ? 'Waking up...' : 'Creating...') : 'Create Session'}
                 </button>
               </div>
+              {sessionLoading && wakingDatabase && (
+                <div
+                  style={{
+                    marginTop: '0.75rem',
+                    display: 'flex',
+                    gap: '0.625rem',
+                    alignItems: 'flex-start',
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    background: '#f8fafc',
+                  }}
+                >
+                  <span className="loading-spinner" aria-hidden="true" />
+                  <div>
+                    <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                      Waking up database...
+                    </p>
+                    <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.125rem' }}>
+                      This may take a few seconds on the free Neon plan.
+                    </p>
+                  </div>
+                </div>
+              )}
               {sessionError && (
                 <p style={{ color: STATUS_COLOR.error, fontSize: '0.8rem', marginTop: '0.5rem' }}>
                   {sessionError}

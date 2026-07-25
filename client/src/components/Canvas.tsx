@@ -47,8 +47,6 @@ export const Canvas: React.FC = () => {
     updateObject: s.updateObject,
     deleteObject: s.deleteObject,
   }));
-
-  // Get current room for socket events
   const { room } = useRoomStore();
 
   // Track pending operations for deduplication (operationId -> true means local)
@@ -155,11 +153,9 @@ export const Canvas: React.FC = () => {
         return;
       }
 
-      // Add object to store without emitting (already on server)
-      const { objects } = useCanvasObjectsStore.getState();
-      if (!objects.find((o) => o.id === object.id)) {
-        useCanvasObjectsStore.getState().setObjects([...objects, object]);
-      }
+      // Use addObjectFromSync (functional update) to avoid snapshot races
+      // when multiple object:created events arrive in rapid succession.
+      useCanvasObjectsStore.getState().addObjectFromSync(object);
     };
 
     // Listen for object updates from other clients

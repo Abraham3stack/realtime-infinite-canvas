@@ -795,6 +795,7 @@ Current structure is designed to support Socket.IO sync in M1.E.3 with minimal r
   - Deduplication via `pendingOperations` Set (ref, no re-renders)
 - Fixed CORS bug in `server/src/index.ts` — dev mode now allows ports 5173-5176
 - Fixed data bug in `objects.ts` — `socket.data.currentRoom` → `authSocket.roomId`
+- Added centralized Neon cold-start retry handling and reused it in room lifecycle paths used by realtime validation
 
 ### ✅ Socket Events Added
 
@@ -838,7 +839,6 @@ New user joins room (late joiner):
 
 ### 🚧 Known Issues
 
-- Socket UI shows "Disconnected" in sidebar (cosmetic bug from M1.D; socket actually connected and events working)
 - Multiple test participants from prior sessions accumulate in PARTICIPANTS list (Neon DB retains prior test sessions; doesn't affect functionality)
 - Object creation via keyboard shortcut focuses on viewport center only (not click-to-place)
 
@@ -853,27 +853,27 @@ New user joins room (late joiner):
 - ✅ `npm run typecheck` — 0 errors (all 3 packages)
 - ✅ `npm run lint` — 0 errors, 0 warnings
 - ✅ `npm run build` — All packages built successfully
+- ✅ `npm test` — PASS (5/5 server object-sync tests)
 - ✅ No console errors in either browser window
 - ✅ No runtime errors or crashes
 
-**Two-Browser Realtime Validation (Alice + Bob, room QFKkFW):**
+**Two-Browser Realtime Validation (Alice + Bob, room 9RnRLk):**
 
-- ✅ Alice creates session and room
-- ✅ Bob creates session and joins Alice's room (PARTICIPANTS: 2)
-- ✅ Alice presses R → rectangle created → Bob's canvas shows rectangle immediately
-- ✅ Alice presses C → circle created → Bob sees red circle
-- ✅ Alice presses T → text object created → Bob sees text
-- ✅ Alice presses S → sticky note created → Bob sees yellow note
-- ✅ Bob presses R → rectangle created → Alice's canvas shows Bob's rectangle
-- ✅ Object IDs stable: same IDs on both clients (generated client-side, stable in store)
-- ✅ No duplicate objects: deduplication via operationId prevents double-add on echo
-- ✅ Canvas pan/zoom preserved on both clients
-- ✅ Room lifecycle intact (join/leave/participants working)
+- ✅ Alice and Bob both joined same room; both clients showed PARTICIPANTS (2)
+- ✅ Alice create propagated to Bob (`object:create` logged and rendered on both clients)
+- ✅ Bob create propagated to Alice (`object:create` logged and rendered on both clients)
+- ✅ Alice move propagated to Bob (`object:update` logged and synchronized coordinates)
+- ✅ Bob move propagated to Alice (`object:update` logged and synchronized coordinates)
+- ✅ Alice delete propagated to Bob (object count dropped on both clients)
+- ✅ Bob delete propagated to Alice (object count dropped on both clients)
+- ✅ Late join hydration validated with brand-new session (LateJoiner immediately rendered all existing objects)
+- ✅ Reconnect synchronization validated (disconnect/reconnect restored connected status and preserved room/object state)
+- ✅ Duplicate protection validated (no duplicate participants and no duplicate objects observed in synced state)
 
 **Screenshots Captured:**
-- Alice's canvas after creating 4 objects (sticky note visible at edge)
-- Bob's canvas showing all 4 objects synced from Alice (sticky note + circle + text + rectangle)
-- Alice's canvas showing Bob's additional rectangle (sync confirmed bidirectional)
+- Alice and Bob room sidebars showing matching room code and participant membership
+- Late-join session showing immediate hydrated room/object state after join
+- Post-reconnect state showing room continuity and synchronized object counts
 
 ### 📝 Files Changed
 
@@ -884,6 +884,7 @@ New user joins room (late joiner):
 - [server/src/socket/index.ts](server/src/socket/index.ts) — Registered object handlers
 - [server/src/socket/handlers/room.ts](server/src/socket/handlers/room.ts) — initializeRoomObjects on create, getRoomObjects on join
 - [server/src/index.ts](server/src/index.ts) — CORS support for dev ports 5173-5176
+- [server/src/db/neonRetry.ts](server/src/db/neonRetry.ts) — centralized transient Neon retry utility
 - [client/src/components/Canvas.tsx](client/src/components/Canvas.tsx) — Socket emit + listen for object events
 - [client/src/hooks/useRoom.ts](client/src/hooks/useRoom.ts) — setObjects on join, clear on leave
 - [client/src/store/objects.ts](client/src/store/objects.ts) — Added setObjects action for late-joiner hydration

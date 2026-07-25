@@ -27,8 +27,13 @@ export interface CanvasObjectsState {
   deleteObject: (id: string) => void;
   getObject: (id: string) => CanvasObject | undefined;
   
-  // Set all objects (for sync from server)
+  // Set all objects (for sync from server — bulk hydration on join)
   setObjects: (objects: CanvasObject[]) => void;
+
+  // Add a single object received from a remote peer.
+  // Uses a functional Zustand update to avoid snapshot races when multiple
+  // object:created events arrive in rapid succession.
+  addObjectFromSync: (object: CanvasObject) => void;
 
   // Clear all objects (for testing/reset)
   clear: () => void;
@@ -124,6 +129,18 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
     set({
       objects,
       nextZIndex: maxZIndex + 1,
+    });
+  },
+
+  addObjectFromSync: (object) => {
+    // Functional update prevents snapshot races when multiple object:created
+    // events arrive in rapid succession — each set() reads the latest committed state.
+    set((state) => {
+      if (state.objects.find((o) => o.id === object.id)) return state; // idempotent
+      return {
+        objects: [...state.objects, object],
+        nextZIndex: Math.max(state.nextZIndex, object.zIndex + 1),
+      };
     });
   },
 

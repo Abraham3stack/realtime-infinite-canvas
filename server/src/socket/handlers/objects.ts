@@ -70,8 +70,11 @@ export function registerObjectHandlers(io: Server): void {
     socket.on('object:create', (payload: ObjectCreatePayload) => {
       const { operationId, roomId, object } = payload;
 
+      console.log(`[object:create] operationId=${operationId}, roomId=${roomId}, objectId=${object.id}`);
+
       // Validate that the socket is in this room
       if (!authSocket.roomId || authSocket.roomId !== roomId) {
+        console.log(`[object:create] AUTH FAILED: socket.roomId=${authSocket.roomId}, requested=${roomId}`);
         socket.emit('error', {
           code: 'UNAUTHORIZED',
           message: 'Not a member of this room',
@@ -83,6 +86,8 @@ export function registerObjectHandlers(io: Server): void {
       const objects = roomObjects.get(roomId) || new Map();
       objects.set(object.id as string, object);
       roomObjects.set(roomId, objects);
+
+      console.log(`[object:create] stored, broadcasting to room ${roomId}`);
 
       // Broadcast creation to all participants in room (including sender).
       // Sender uses operationId to match the echo and skip re-applying.
@@ -97,8 +102,11 @@ export function registerObjectHandlers(io: Server): void {
     socket.on('object:update', (payload: ObjectUpdatePayload) => {
       const { operationId, roomId, objectId, updates } = payload;
 
+      console.log(`[object:update] operationId=${operationId}, roomId=${roomId}, objectId=${objectId}`);
+
       // Validate room membership
       if (!authSocket.roomId || authSocket.roomId !== roomId) {
+        console.log(`[object:update] AUTH FAILED: socket.roomId=${authSocket.roomId}, requested=${roomId}`);
         socket.emit('error', {
           code: 'UNAUTHORIZED',
           message: 'Not a member of this room',
@@ -109,6 +117,7 @@ export function registerObjectHandlers(io: Server): void {
       // Update object in room storage
       const objects = roomObjects.get(roomId);
       if (!objects || !objects.has(objectId)) {
+        console.log(`[object:update] NOT_FOUND: objectId=${objectId}`);
         socket.emit('error', {
           code: 'NOT_FOUND',
           message: 'Object not found',
@@ -119,6 +128,8 @@ export function registerObjectHandlers(io: Server): void {
       const object = objects.get(objectId);
       const updatedObject = { ...object, ...updates };
       objects.set(objectId, updatedObject);
+
+      console.log(`[object:update] stored, broadcasting to room ${roomId}`);
 
       // Broadcast update to all participants in room
       io.to(roomId).emit('object:updated', {

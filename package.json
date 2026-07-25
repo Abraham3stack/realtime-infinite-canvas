@@ -11,6 +11,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "lint": "eslint --ext .ts,.tsx . --ignore-path .gitignore",
     "format": "prettier --write --ignore-path .gitignore .",
     "dev": "npm run dev --workspaces --if-present",

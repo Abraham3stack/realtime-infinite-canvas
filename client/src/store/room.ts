@@ -35,7 +35,9 @@ export const useRoomStore = create<RoomState>((set) => ({
 
   addParticipant: (participant) =>
     set((state) => ({
-      participants: [...state.participants, participant],
+      participants: state.participants.some((p) => p.id === participant.id)
+        ? state.participants.map((p) => (p.id === participant.id ? participant : p))
+        : [...state.participants, participant],
     })),
 
   removeParticipant: (participantId) =>

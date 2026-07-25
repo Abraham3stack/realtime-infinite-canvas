@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts",
     "dev": "tsx watch src/index.ts",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",

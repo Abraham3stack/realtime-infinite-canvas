@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { customAlphabet } from 'nanoid';
 import { prisma } from '../../db/prisma.js';
+import { withNeonColdStartRetry } from '../../db/neonRetry.js';
 import { ErrorCodes } from '@realtime-canvas/shared';
 import type { AuthenticatedSocket } from '../types.js';
 import { initializeRoomObjects, getRoomObjects } from './objects.js';
@@ -64,24 +65,26 @@ export function registerRoomHandlers(io: Server): void {
       try {
         // Create room and participant in a single transaction. Ensures atomicity if
         // either operation fails (e.g., DB constraint violation).
-        const { room, participant } = await prisma.$transaction(async (tx) => {
-          const r = await tx.room.create({
-            data: {
-              createdBySessionId: sessionId,
-              shareCode: generateShareCode(),
-              title: roomTitle,
-            },
-          });
+        const { room, participant } = await withNeonColdStartRetry(async () => {
+          return prisma.$transaction(async (tx) => {
+            const r = await tx.room.create({
+              data: {
+                createdBySessionId: sessionId,
+                shareCode: generateShareCode(),
+                title: roomTitle,
+              },
+            });
 
-          const p = await tx.roomParticipant.create({
-            data: {
-              roomId: r.id,
-              sessionId,
-            },
-            include: { session: { include: { user: true } } },
-          });
+            const p = await tx.roomParticipant.create({
+              data: {
+                roomId: r.id,
+                sessionId,
+              },
+              include: { session: { include: { user: true } } },
+            });
 
-          return { room: r, participant: p };
+            return { room: r, participant: p };
+          });
         });
 
         // Socket joins the Socket.IO room — broadcasts to this room will reach only
@@ -149,37 +152,46 @@ export function registerRoomHandlers(io: Server): void {
 
       const { roomId, shareCode } = payload as RoomJoinPayload;
 
-      // Resolve room by ID or shareCode
-      let room;
-      if (roomId) {
-        room = await prisma.room.findUnique({ where: { id: roomId } });
-      } else if (shareCode) {
-        room = await prisma.room.findUnique({ where: { shareCode } });
-      } else {
-        callback({ code: ErrorCodes.INVALID_PAYLOAD, message: 'roomId or shareCode required' });
-        return;
-      }
-
-      if (!room) {
-        callback({ code: ErrorCodes.ROOM_NOT_FOUND, message: 'Room not found' });
-        return;
-      }
-
       try {
+        // Resolve room by ID or shareCode
+        const room = await withNeonColdStartRetry(async () => {
+          if (roomId) {
+            return prisma.room.findUnique({ where: { id: roomId } });
+          }
+          if (shareCode) {
+            return prisma.room.findUnique({ where: { shareCode } });
+          }
+          return null;
+        });
+
+        if (!roomId && !shareCode) {
+          callback({ code: ErrorCodes.INVALID_PAYLOAD, message: 'roomId or shareCode required' });
+          return;
+        }
+
+        if (!room) {
+          callback({ code: ErrorCodes.ROOM_NOT_FOUND, message: 'Room not found' });
+          return;
+        }
+
         // Check if participant already exists; if not, create one.
         // Using upsert to be idempotent: if join is retried, the second call
         // succeeds without creating a duplicate row.
-        const participant = await prisma.roomParticipant.upsert({
-          where: { roomId_sessionId: { roomId: room.id, sessionId } },
-          create: { roomId: room.id, sessionId },
-          update: { isActive: true, lastSeenAt: new Date() },
-          include: { session: { include: { user: true } } },
+        const participant = await withNeonColdStartRetry(async () => {
+          return prisma.roomParticipant.upsert({
+            where: { roomId_sessionId: { roomId: room.id, sessionId } },
+            create: { roomId: room.id, sessionId },
+            update: { isActive: true, lastSeenAt: new Date() },
+            include: { session: { include: { user: true } } },
+          });
         });
 
         // Fetch all current participants in the room for the state snapshot.
-        const participants = await prisma.roomParticipant.findMany({
-          where: { roomId: room.id, isActive: true },
-          include: { session: { include: { user: true } } },
+        const participants = await withNeonColdStartRetry(async () => {
+          return prisma.roomParticipant.findMany({
+            where: { roomId: room.id, isActive: true },
+            include: { session: { include: { user: true } } },
+          });
         });
 
         // Socket joins the Socket.IO room.

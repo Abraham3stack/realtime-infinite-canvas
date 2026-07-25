@@ -15,17 +15,18 @@ export function useConnectionStatus() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Only attempt connection if socket has auth (token) available.
-    // This prevents unauthenticated connection attempts.
-    const hasAuth = socket.auth && typeof socket.auth === 'object' && 'token' in socket.auth;
-    if (!hasAuth) {
-      return;
-    }
+    // Register event listeners unconditionally. The socket uses autoConnect: false,
+    // so it will not fire 'connect' until setSocketToken() explicitly calls socket.connect()
+    // after the user authenticates. We must not guard listener registration behind
+    // hasAuth here — the effect runs once at mount (before auth exists), so
+    // any auth guard causes listeners to never be registered at all.
+    // setSocketToken() in useAuth.ts owns the connect() call.
 
-    setStatus('connecting');
-    // Initiate the WebSocket handshake. The socket was created with autoConnect: false
-    // so no connection is attempted until the app shell has rendered AND a token is available.
-    socket.connect();
+    // Sync initial state: if the socket is already connected when this effect runs
+    // (e.g. HMR reload after auth), reflect that immediately.
+    if (socket.connected) {
+      setStatus('connected');
+    }
 
     const onConnect = () => {
       setStatus('connected');
@@ -52,14 +53,13 @@ export function useConnectionStatus() {
     socket.on('disconnect', onDisconnect);
 
     return () => {
-      // Clean up listeners on unmount. In normal app operation this only fires
-      // during HMR reloads; actual disconnect is handled by the server detecting
-      // the broken TCP connection.
       socket.off('connect', onConnect);
       socket.off('server:hello', onHello);
       socket.off('connect_error', onConnectError);
       socket.off('disconnect', onDisconnect);
-      socket.disconnect();
+      // Do not call socket.disconnect() here. The socket is a singleton shared
+      // by the whole app; disconnecting on cleanup would kill the live connection
+      // during React StrictMode double-invocation or HMR reloads.
     };
   }, []);
 
