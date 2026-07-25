@@ -1,8 +1,8 @@
 // Socket.IO event validation schemas
 
 import { z } from 'zod';
-import { RoomParticipantSchema, ViewportSchema, RoomStateSchema } from './room';
-import { CanvasObjectSchema, CanvasObjectPatchSchema } from './canvas';
+import { RoomParticipantSchema, ViewportSchema, RoomStateSchema } from './room.js';
+import { CanvasObjectSchema, CanvasObjectPatchSchema } from './canvas.js';
 
 export const ErrorResponseSchema = z.object({
   code: z.string(),

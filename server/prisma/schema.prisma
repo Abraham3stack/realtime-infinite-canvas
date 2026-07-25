@@ -1,0 +1,129 @@
+// Prisma schema for Realtime Infinite Canvas
+// Datasource: Neon PostgreSQL (serverless-compatible connection pooling recommended)
+// All MVP models are defined here in a single migration to avoid incremental schema churn.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & Auth
+// ---------------------------------------------------------------------------
+
+// Lightweight guest identity — no password, no OAuth. Display name only.
+// One user can hold multiple sessions (e.g. different browser tabs).
+model GuestUser {
+  id          String         @id @default(uuid())
+  displayName String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  sessions    GuestSession[]
+}
+
+// Time-bounded opaque session. Only the SHA-256 hash of the raw token is stored.
+// The raw token is issued once in the HTTP response and never persisted.
+model GuestSession {
+  id               String   @id @default(uuid())
+  userId           String
+  // SHA-256 hex digest of the raw bearer token. Fixed-width for efficient indexing.
+  sessionTokenHash String   @unique @db.Char(64)
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         GuestUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rooms        Room[]
+  participants RoomParticipant[]
+}
+
+// ---------------------------------------------------------------------------
+// Rooms
+// ---------------------------------------------------------------------------
+
+// A collaborative canvas session identified by a short share code.
+model Room {
+  id                 String   @id @default(uuid())
+  shareCode          String   @unique
+  createdBySessionId String
+  title              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  createdBy     GuestSession      @relation(fields: [createdBySessionId], references: [id])
+  participants  RoomParticipant[]
+  canvasObjects CanvasObject[]
+}
+
+// Tracks membership and the last known viewport of each participant.
+// The unique constraint prevents duplicate active-membership rows per session per room.
+model RoomParticipant {
+  id               String   @id @default(uuid())
+  roomId           String
+  sessionId        String
+  joinedAt         DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+  isActive         Boolean  @default(true)
+  lastViewportX    Float?
+  lastViewportY    Float?
+  lastViewportZoom Float?
+
+  room    Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  session GuestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, sessionId])
+}
+
+// ---------------------------------------------------------------------------
+// Canvas Objects (single-table strategy for all object types)
+// ---------------------------------------------------------------------------
+
+// Flat model using nullable type-specific columns. Avoids join complexity for
+// real-time queries. The `type` discriminator maps to the shared CanvasObjectType union.
+// `deletedAt` enables soft-delete for undo/time-travel support (future phases).
+model CanvasObject {
+  id                 String    @id @default(uuid())
+  roomId             String
+  type               String    // 'text' | 'shape' | 'sticky' | 'image' | 'audio'
+  x                  Float
+  y                  Float
+  zIndex             Int
+  rotation           Float?
+  createdBySessionId String
+  version            Int       @default(1)
+  lastServerSeq      Int       @default(0)
+
+  // Text & Sticky
+  content     String?
+  fontSize    Int?
+  fontFamily  String?
+  color       String?
+
+  // Shape
+  shapeType   String? // 'rectangle' | 'circle' | 'triangle'
+  width       Float?
+  height      Float?
+  fillColor   String?
+  strokeColor String?
+
+  // Sticky (overrides text defaults)
+  backgroundColor String?
+  textColor       String?
+
+  // Media (Image & Audio)
+  mediaUrl      String?
+  mediaPublicId String?
+  mimeType      String?
+  sizeBytes     Int?
+  durationMs    Int?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}

@@ -3,6 +3,15 @@ import { createServer } from 'node:http';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import { registerSocketHandlers } from './socket/index.js';
+import authRouter from './routes/auth.js';
+
+// Fail fast on missing DATABASE_URL so the error is obvious during startup
+// rather than surfacing as an opaque Prisma connection failure on first request.
+if (!process.env.DATABASE_URL) {
+  console.error('[server] FATAL: DATABASE_URL environment variable is not set.');
+  console.error('[server] Copy server/.env.example to server/.env and fill in your Neon connection string.');
+  process.exit(1);
+}
 
 const PORT = Number(process.env.PORT) || 3000;
 // CLIENT_ORIGIN is set per environment. In dev the Vite HMR server runs on 5173.
@@ -18,6 +27,9 @@ app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Guest authentication — create and validate lightweight session tokens.
+app.use('/auth', authRouter);
 
 // Wrap Express in a plain Node HTTP server. Socket.IO attaches to the same port
 // and handles the WebSocket upgrade from the HTTP connection automatically.

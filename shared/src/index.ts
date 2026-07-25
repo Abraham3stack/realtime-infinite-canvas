@@ -1,7 +1,7 @@
 // Main export for shared package
 // Export types first, then validation schemas only
 
-export * from './types';
+export * from './types/index.js';
 
 // Validation schemas (exports only schemas and inferred types, not duplicates)
 export {
@@ -46,4 +46,4 @@ export {
   SyncDeltaBatchPayloadSchema,
   MediaRegisterPayloadSchema,
   SyncErrorPayloadSchema,
-} from './validation';
+} from './validation/index.js';

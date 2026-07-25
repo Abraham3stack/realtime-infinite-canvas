@@ -1,7 +1,7 @@
 // Socket.IO event types
 
-import { CanvasObject, CanvasObjectPatch } from './canvas';
-import { RoomState, Presence, Viewport, RoomParticipant } from './room';
+import { CanvasObject, CanvasObjectPatch } from './canvas.js';
+import { RoomState, Presence, Viewport, RoomParticipant } from './room.js';
 
 // Error response
 export interface ErrorResponse {

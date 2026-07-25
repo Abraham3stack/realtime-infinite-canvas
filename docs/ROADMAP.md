@@ -263,6 +263,60 @@ All validation gates passed:
 
 - M1.C - Database Integration & Auth (pending approval)
 
+---
+
+## Phase Status: M1.C - Database Integration & Auth
+
+**Status**: ✅ COMPLETE
+
+### ✅ Completed
+
+- `server/prisma/schema.prisma` — all MVP models: GuestUser, GuestSession, Room, RoomParticipant, CanvasObject
+- `prisma db push` applied schema to Neon PostgreSQL successfully
+- `server/src/db/prisma.ts` — PrismaClient singleton with global guard for hot-reload safety
+- `server/src/middleware/validate.ts` — generic Zod body validation middleware factory
+- `server/src/middleware/requireSession.ts` — Bearer token auth middleware (ready for M1.D routes)
+- `server/src/routes/auth.ts` — `POST /auth/guest` and `POST /auth/validate`
+- `server/.env.example` — documented connection string template
+- `server/src/index.ts` — DATABASE_URL guard on startup, `/auth` router mounted
+- `shared/src` — all relative imports updated to explicit `.js` extensions for Node ESM compatibility
+- `shared/package.json` — added `"type": "module"` to suppress Node typeless-package warning
+
+### ⚠️ Remaining
+
+- None - M1.C complete
+
+### 🚧 Known Issues
+
+- None
+
+### 📌 Next Phase
+
+- M1.D - Room Lifecycle (pending approval)
+
+### 🧪 Validation Results
+
+- ✅ `prisma db push` — schema applied to Neon in 18s, all 5 tables created
+- ✅ `npm run typecheck` — 0 errors
+- ✅ `npm run build` — all packages compiled
+- ✅ `npm run lint` — 0 errors, 0 warnings
+- ✅ `POST /auth/guest` → 201 with sessionToken, userId, displayName, expiresAt
+- ✅ `POST /auth/validate` (valid token) → 200 `{ valid: true, sessionId, userId, displayName }`
+- ✅ `POST /auth/validate` (invalid token) → 401 `SESSION_INVALID`
+- ✅ `POST /auth/guest` (missing displayName) → 400 `INVALID_PAYLOAD` with field errors
+- ✅ `POST /auth/validate` (missing token) → 400 `INVALID_PAYLOAD`
+- ✅ Database verification: GuestUser + GuestSession rows confirmed in Neon
+- ✅ Browser smoke test: HTML 409 bytes, `<div id="root">` present, JS/CSS bundles linked
+
+### 📝 Technical Debt
+
+- Session token expiry is fixed at 24 hours. Production should use a configurable env var (SESSION_TTL_HOURS).
+- `requireSession` middleware does a full DB lookup per request. A future phase should add Redis-based caching or JWT to avoid per-request DB round-trips.
+
+### 📝 Issues Resolved
+
+- `ERR_UNSUPPORTED_DIR_IMPORT` — Shared package used bare directory imports (e.g. `./types`). Fixed by adding explicit `.js` extensions to all 5 affected shared source files. This was a Node ESM compatibility gap between the bundler-mode TypeScript config and the Node16 runtime.
+
 ### 🧪 Validation Results
 
 - ✅ `npm run typecheck` — 0 errors
