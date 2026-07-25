@@ -1,0 +1,457 @@
+{
+  "meta": {
+    "date": "2026-07-25",
+    "roomId": "51a1c169-eba7-4577-8a96-9094ac998f0f",
+    "shareCode": "5BJiLa",
+    "targetObjectId": "obj_1785017072888_6zpum7o",
+    "participants": [
+      "P4HostDet",
+      "P4UserB",
+      "P4UserC",
+      "P4UserD",
+      "P4UserE",
+      "P4UserF"
+    ],
+    "rules": {
+      "noProductionSyncLogicChange": true,
+      "noDirectKonvaMutationInNewSuite": true
+    }
+  },
+  "harnessAudit": [
+    {
+      "pattern": "page.evaluate used for collision updates",
+      "evidence": "Previous scripts set positions inside evaluate and fired synthetic events for target object"
+    },
+    {
+      "pattern": "direct Konva mutation",
+      "evidence": "g.x(...), g.y(...), handle.x(...), handle.y(...) used directly"
+    },
+    {
+      "pattern": "manual dragend firing",
+      "evidence": "g.fire('dragend',{target:g}) and handle.fire('dragend',{target:handle}) used"
+    },
+    {
+      "pattern": "manual resize event firing",
+      "evidence": "resize handle retrieved from Konva nodes and synthetic dragend emitted"
+    },
+    {
+      "pattern": "deferred executions",
+      "evidence": "deferredResultId polling loops (120s windows) were used during rapid alternating phase"
+    }
+  ],
+  "baseline": {
+    "clients": {
+      "P4HostDet": {
+        "present": true,
+        "dupCount": 1,
+        "x": 314,
+        "y": 180,
+        "width": 100,
+        "height": 100,
+        "runtimeErrors": 0,
+        "rejections": 0,
+        "consoleErrors": 0
+      },
+      "P4UserB": {
+        "present": true,
+        "dupCount": 1,
+        "x": 314,
+        "y": 180,
+        "width": 100,
+        "height": 100,
+        "runtimeErrors": 0,
+        "rejections": 0,
+        "consoleErrors": 0
+      },
+      "P4UserC": {
+        "present": true,
+        "dupCount": 1,
+        "x": 314,
+        "y": 180,
+        "width": 100,
+        "height": 100,
+        "runtimeErrors": 0,
+        "rejections": 0,
+        "consoleErrors": 0
+      },
+      "P4UserD": {
+        "present": true,
+        "dupCount": 1,
+        "x": 314,
+        "y": 180,
+        "width": 100,
+        "height": 100,
+        "runtimeErrors": 0,
+        "rejections": 0,
+        "consoleErrors": 0
+      },
+      "P4UserE": {
+        "present": true,
+        "dupCount": 1,
+        "x": 314,
+        "y": 180,
+        "width": 100,
+        "height": 100,
+        "runtimeErrors": 0,
+        "rejections": 0,
+        "consoleErrors": 0
+      },
+      "P4UserF": {
+        "present": true,
+        "dupCount": 1,
+        "x": 314,
+        "y": 180,
+        "width": 100,
+        "height": 100,
+        "runtimeErrors": 0,
+        "rejections": 0,
+        "consoleErrors": 0
+      }
+    },
+    "postgres": {
+      "id": "obj_1785017072888_6zpum7o",
+      "roomId": "51a1c169-eba7-4577-8a96-9094ac998f0f",
+      "x": 314,
+      "y": 180,
+      "width": 100,
+      "height": 100,
+      "updatedAt": "2026-07-25 22:04:32.902"
+    },
+    "serverLogs": "No emitted server log lines captured in docker logs for this interval.",
+    "browserConsoleNotes": []
+  },
+  "scenarios": [
+    {
+      "scenario": "simultaneous drag (real pointer)",
+      "status": "INCONCLUSIVE",
+      "actions": [
+        "P4UserB pointer drag attempt",
+        "P4UserC pointer drag attempt"
+      ],
+      "observed": {
+        "clients": {
+          "P4HostDet": {
+            "x": 314,
+            "y": 180,
+            "width": 100,
+            "height": 100,
+            "dupCount": 1,
+            "json": {
+              "x": 314,
+              "y": 180,
+              "width": 100,
+              "height": 100
+            },
+            "runtime": {
+              "errors": 0,
+              "rejections": 0,
+              "consoleErrors": 0
+            }
+          },
+          "P4UserB": {
+            "x": 314,
+            "y": 180,
+            "width": 100,
+            "height": 100,
+            "dupCount": 1,
+            "json": {
+              "x": 314,
+              "y": 180,
+              "width": 100,
+              "height": 100
+            },
+            "runtime": {
+              "errors": 0,
+              "rejections": 0,
+              "consoleErrors": 0
+            }
+          },
+          "P4UserC": {
+            "x": 314,
+            "y": 180,
+            "width": 100,
+            "height": 100,
+            "dupCount": 1,
+            "json": {
+              "x": 314,
+              "y": 180,
+              "width": 100,
+              "height": 100
+            },
+            "runtime": {
+              "errors": 0,
+              "rejections": 0,
+              "consoleErrors": 0
+            }
+          },
+          "P4UserD": {
+            "x": 314,
+            "y": 180,
+            "width": 100,
+            "height": 100,
+            "dupCount": 1,
+            "json": {
+              "x": 314,
+              "y": 180,
+              "width": 100,
+              "height": 100
+            },
+            "runtime": {
+              "errors": 0,
+              "rejections": 0,
+              "consoleErrors": 0
+            }
+          },
+          "P4UserE": {
+            "x": 314,
+            "y": 180,
+            "width": 100,
+            "height": 100,
+            "dupCount": 1,
+            "json": {
+              "x": 314,
+              "y": 180,
+              "width": 100,
+              "height": 100
+            },
+            "runtime": {
+              "errors": 0,
+              "rejections": 0,
+              "consoleErrors": 0
+            }
+          },
+          "P4UserF": {
+            "x": 314,
+            "y": 180,
+            "width": 100,
+            "height": 100,
+            "dupCount": 1,
+            "json": {
+              "x": 314,
+              "y": 180,
+              "width": 100,
+              "height": 100
+            },
+            "runtime": {
+              "errors": 0,
+              "rejections": 0,
+              "consoleErrors": 0
+            }
+          }
+        },
+        "postgres": {
+          "id": "obj_1785017072888_6zpum7o",
+          "roomId": "51a1c169-eba7-4577-8a96-9094ac998f0f",
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "updatedAt": "2026-07-25 22:04:32.902"
+        },
+        "hitTesting": {
+          "stageGetIntersectionAtObjectCenter": null,
+          "note": "Object exists in client state and JSON export, but stage hit-test returned null under automation."
+        }
+      },
+      "conclusion": "No collision update was actually applied by pointer harness; cannot evaluate LWW behavior from this scenario."
+    },
+    {
+      "scenario": "simultaneous resize (real pointer)",
+      "status": "INCONCLUSIVE",
+      "actions": [
+        "P4UserD resize-handle drag attempt",
+        "P4UserE resize-handle drag attempt"
+      ],
+      "observed": {
+        "allClientsConverged": true,
+        "state": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "dupCount": 1
+        },
+        "hostExportedJson": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100
+        },
+        "postgres": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "updatedAt": "2026-07-25 22:04:32.902"
+        },
+        "runtimeCountersAllZero": true
+      },
+      "conclusion": "Pointer resize attempts produced no object updates under automation; collision behavior not exercised."
+    },
+    {
+      "scenario": "drag vs resize (real pointer)",
+      "status": "INCONCLUSIVE",
+      "actions": [
+        "P4UserB drag attempt",
+        "P4UserD resize attempt"
+      ],
+      "observed": {
+        "allClientsConverged": true,
+        "state": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "dupCount": 1
+        },
+        "hostExportedJson": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100
+        },
+        "postgres": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "updatedAt": "2026-07-25 22:04:32.902"
+        },
+        "runtimeCountersAllZero": true
+      },
+      "conclusion": "No drag/resize update was materialized; mixed-collision behavior not exercised in this automation mode."
+    },
+    {
+      "scenario": "rapid alternating edits (real pointer loops)",
+      "status": "INCONCLUSIVE",
+      "actions": [
+        "P4UserB rapid drag loop (8 steps)",
+        "P4UserC rapid resize loop (8 steps)"
+      ],
+      "observed": {
+        "allClientsConverged": true,
+        "state": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "dupCount": 1
+        },
+        "hostExportedJson": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100
+        },
+        "postgres": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "updatedAt": "2026-07-25 22:04:32.902"
+        },
+        "runtimeCountersAllZero": true
+      },
+      "conclusion": "Rapid pointer sequences did not produce object updates in automation; no contention outcome could be measured."
+    },
+    {
+      "scenario": "reconnect during active edits (real pointer loops + server restart)",
+      "status": "INCONCLUSIVE",
+      "actions": [
+        "P4UserB drag loop during restart",
+        "P4UserC resize loop during restart",
+        "docker compose restart server during loops"
+      ],
+      "observed": {
+        "postReconnectConnectedAllClients": true,
+        "allClientsConverged": true,
+        "state": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "dupCount": 1
+        },
+        "hostExportedJson": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100
+        },
+        "postgres": {
+          "x": 314,
+          "y": 180,
+          "width": 100,
+          "height": 100,
+          "updatedAt": "2026-07-25 22:04:32.902"
+        },
+        "browserConsole": [
+          "WebSocket handshake reset events observed during restart window (expected transient reconnect noise)."
+        ],
+        "runtimeCountersAllZero": true
+      },
+      "conclusion": "Reconnect recovered cleanly, but active edit contention was not exercised because pointer edits did not apply under automation."
+    }
+  ],
+  "evidenceMatrix": [
+    {
+      "scenario": "simultaneous drag",
+      "passFail": "FAIL",
+      "clientConvergence": "YES (unchanged)",
+      "jsonMatch": "YES",
+      "postgresMatch": "YES",
+      "console": "clean",
+      "runtime": "clean",
+      "note": "pointer drag did not produce update"
+    },
+    {
+      "scenario": "simultaneous resize",
+      "passFail": "FAIL",
+      "clientConvergence": "YES (unchanged)",
+      "jsonMatch": "YES",
+      "postgresMatch": "YES",
+      "console": "clean",
+      "runtime": "clean",
+      "note": "pointer resize did not produce update"
+    },
+    {
+      "scenario": "drag vs resize",
+      "passFail": "FAIL",
+      "clientConvergence": "YES (unchanged)",
+      "jsonMatch": "YES",
+      "postgresMatch": "YES",
+      "console": "clean",
+      "runtime": "clean",
+      "note": "no state mutation from pointer actions"
+    },
+    {
+      "scenario": "rapid alternating edits",
+      "passFail": "FAIL",
+      "clientConvergence": "YES (unchanged)",
+      "jsonMatch": "YES",
+      "postgresMatch": "YES",
+      "console": "clean",
+      "runtime": "clean",
+      "note": "loops executed but no object updates applied"
+    },
+    {
+      "scenario": "reconnect during active edits",
+      "passFail": "FAIL",
+      "clientConvergence": "YES (unchanged)",
+      "jsonMatch": "YES",
+      "postgresMatch": "YES",
+      "console": "ws reset during restart",
+      "runtime": "clean",
+      "note": "reconnect okay; active edits not applied"
+    }
+  ],
+  "finalDiagnosis": {
+    "defectProven": false,
+    "conclusion": "Validation harness artifact remains the supported conclusion for the prior divergence. This rerun did not prove production synchronization defect.",
+    "reason": [
+      "Single canonical DB row remained stable with no duplicates.",
+      "All clients stayed converged and duplicate count stayed 1.",
+      "Real-pointer harness in this automation session failed to produce draggable/resizable mutations on Konva object."
+    ]
+  }
+}

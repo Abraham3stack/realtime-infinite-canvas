@@ -37,7 +37,7 @@ const shapeComponentMap: Record<
  * Uses factory pattern to decouple object types from rendering logic.
  * Extensible: new types added by registering component in shapeComponentMap.
  */
-export const ObjectRenderer: React.FC<ObjectRendererProps> = ({
+const ObjectRendererImpl: React.FC<ObjectRendererProps> = ({
   object,
   selected,
   onMove,
@@ -53,3 +53,8 @@ export const ObjectRenderer: React.FC<ObjectRendererProps> = ({
 
   return <Component object={object} selected={selected} onMove={onMove} onResize={onResize} onDelete={onDelete} />;
 };
+
+export const ObjectRenderer = React.memo(
+  ObjectRendererImpl,
+  (prev, next) => prev.object === next.object && prev.selected === next.selected
+);

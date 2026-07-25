@@ -25,11 +25,23 @@ export const ImageShape: React.FC<ShapeProps> = ({ object, selected, onMove, onR
       return;
     }
 
+    let cancelled = false;
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => setImage(img);
-    img.onerror = () => setImage(null);
+    img.onload = () => {
+      if (!cancelled) setImage(img);
+    };
+    img.onerror = () => {
+      if (!cancelled) setImage(null);
+    };
     img.src = object.mediaUrl;
+
+    return () => {
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
+      img.src = '';
+    };
   }, [object.mediaUrl]);
 
   const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {

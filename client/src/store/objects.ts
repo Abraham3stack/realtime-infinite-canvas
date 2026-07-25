@@ -204,12 +204,29 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
   },
 
   updateObject: (id, updates) => {
-    const nextUpdatedAt = updates.updatedAt ?? new Date().toISOString();
-    set((state) => ({
-      objects: state.objects.map((obj) =>
-        obj.id === id ? { ...obj, ...updates, updatedAt: nextUpdatedAt } : obj
-      ),
-    }));
+    set((state) => {
+      const index = state.objects.findIndex((obj) => obj.id === id);
+      if (index === -1) return state;
+
+      const current = state.objects[index];
+      const entries = Object.entries(updates) as Array<[keyof CanvasObject, unknown]>;
+      const hasMeaningfulChange = entries.some(([key, value]) => !Object.is(current[key], value));
+
+      if (!hasMeaningfulChange) {
+        return state;
+      }
+
+      const next: CanvasObject = {
+        ...current,
+        ...updates,
+        updatedAt: (updates.updatedAt as string | undefined) ?? new Date().toISOString(),
+      };
+
+      const objects = state.objects.slice();
+      objects[index] = next;
+
+      return { objects };
+    });
   },
 
   deleteObject: (id) => {

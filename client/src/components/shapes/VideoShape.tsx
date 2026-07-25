@@ -49,6 +49,7 @@ export const VideoShape: React.FC<ShapeProps> = ({ object, selected, onMove, onR
       video.pause();
       video.removeEventListener('loadeddata', handleLoadedData);
       video.removeEventListener('error', handleError);
+      video.src = '';
     };
   }, [object.mediaUrl]);
 

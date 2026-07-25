@@ -9,6 +9,7 @@ import { LoadingOverlay } from './ui/LoadingOverlay.js';
 import { socket } from '../socket.js';
 import type { CanvasObjectType } from '../store/objects.js';
 import { uploadMediaFiles, type MediaUploadType, type UploadedMedia } from '../hooks/useMediaUpload.js';
+import { canvasCenterToWorld, clientToCanvasPoint } from '../utils/coordinates.js';
 
 // Type definitions for socket payloads
 interface ObjectCreatedPayload {
@@ -89,6 +90,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Track pending operations for deduplication (operationId -> true means local)
   const pendingOperations = useRef<Set<string>>(new Set());
+  const panRafRef = useRef<number | null>(null);
+  const pendingPanRef = useRef({ dx: 0, dy: 0 });
+  const zoomRafRef = useRef<number | null>(null);
+  const pendingZoomRef = useRef<{ deltaY: number; mouseX: number; mouseY: number } | null>(null);
 
   // Generate unique operation ID for deduplication
   const generateOperationId = useCallback(() => {
@@ -132,10 +137,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const createObjectAndSync = useCallback((type: CanvasObjectType) => {
     if (!room) return;
 
-    const centerX = (stageSize.width / 2 - offsetX) / scale;
-    const centerY = (stageSize.height / 2 - offsetY) / scale;
+    const center = canvasCenterToWorld(stageSize, { offsetX, offsetY, scale });
 
-    const id = addObject(type, centerX, centerY);
+    const id = addObject(type, center.x, center.y);
     const object = useCanvasObjectsStore.getState().getObject(id);
     if (!object) return;
 
@@ -147,8 +151,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const createMediaObjectsAndSync = useCallback((uploads: UploadedMedia[]) => {
     if (!room) return;
 
-    const centerX = (stageSize.width / 2 - offsetX) / scale;
-    const centerY = (stageSize.height / 2 - offsetY) / scale;
+    const center = canvasCenterToWorld(stageSize, { offsetX, offsetY, scale });
 
     const createdIds: string[] = [];
 
@@ -156,8 +159,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       const type = upload.resourceType;
       const id = addMediaObject({
         type,
-        x: centerX + index * 28,
-        y: centerY + index * 22,
+        x: center.x + index * 28,
+        y: center.y + index * 22,
         mediaUrl: upload.secureUrl,
         mediaPublicId: upload.publicId,
         mediaResourceType: upload.resourceType,
@@ -343,6 +346,26 @@ export const Canvas: React.FC<CanvasProps> = ({
     onObjectDeleted?.();
   }, [deleteObject, emitDelete, onObjectDeleted, selectedObjectId]);
 
+  const moveObjectAndSync = useCallback((objectId: string, x: number, y: number) => {
+    const existing = useCanvasObjectsStore.getState().getObject(objectId);
+    if (!existing) return;
+
+    if (existing.x === x && existing.y === y) return;
+
+    updateObject(objectId, { x, y });
+    emitUpdate(objectId, { x, y });
+  }, [emitUpdate, updateObject]);
+
+  const resizeObjectAndSync = useCallback((objectId: string, width: number, height: number) => {
+    const existing = useCanvasObjectsStore.getState().getObject(objectId);
+    if (!existing) return;
+
+    if (existing.width === width && existing.height === height) return;
+
+    updateObject(objectId, { width, height });
+    emitUpdate(objectId, { width, height });
+  }, [emitUpdate, updateObject]);
+
   useEffect(() => {
     if (!activeTool) return;
     const timer = window.setTimeout(() => setActiveTool(null), 350);
@@ -511,28 +534,84 @@ export const Canvas: React.FC<CanvasProps> = ({
     const deltaX = e.evt.clientX - lastMousePos.current.x;
     const deltaY = e.evt.clientY - lastMousePos.current.y;
 
-    panBy(deltaX, deltaY);
+    pendingPanRef.current.dx += deltaX;
+    pendingPanRef.current.dy += deltaY;
+    if (panRafRef.current === null) {
+      panRafRef.current = window.requestAnimationFrame(() => {
+        const { dx, dy } = pendingPanRef.current;
+        pendingPanRef.current = { dx: 0, dy: 0 };
+        panRafRef.current = null;
+        if (dx !== 0 || dy !== 0) {
+          panBy(dx, dy);
+        }
+      });
+    }
+
     lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY };
   }, [panBy]);
 
   // Mouse up: stop panning
   const handleMouseUp = useCallback(() => {
     isPanning.current = false;
+    if (panRafRef.current !== null) {
+      window.cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+      pendingPanRef.current = { dx: 0, dy: 0 };
+    }
   }, []);
 
   // Wheel: zoom toward/away from mouse position
   const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
 
-    // Determine zoom direction: wheel up (negative deltaY) = zoom in (>1), down = zoom out (<1)
-    const zoomFactor = e.evt.deltaY < 0 ? 1.1 : 0.9;
-    
-    // Get mouse position in screen space
-    const mouseX = e.evt.clientX;
-    const mouseY = e.evt.clientY;
-    
-    zoomBy(zoomFactor, mouseX, mouseY);
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    // Convert viewport client coordinates to canvas-local coordinates before zoom.
+    // Passing raw clientX/clientY here can shift zoom focus and mimic hit-test drift.
+    const pointer = clientToCanvasPoint(
+      e.evt.clientX,
+      e.evt.clientY,
+      stage.container().getBoundingClientRect()
+    );
+
+    const pending = pendingZoomRef.current;
+    if (pending) {
+      pending.deltaY += e.evt.deltaY;
+      pending.mouseX = pointer.x;
+      pending.mouseY = pointer.y;
+    } else {
+      pendingZoomRef.current = {
+        deltaY: e.evt.deltaY,
+        mouseX: pointer.x,
+        mouseY: pointer.y,
+      };
+    }
+
+    if (zoomRafRef.current === null) {
+      zoomRafRef.current = window.requestAnimationFrame(() => {
+        const next = pendingZoomRef.current;
+        pendingZoomRef.current = null;
+        zoomRafRef.current = null;
+        if (!next) return;
+
+        const normalizedDelta = Math.max(-120, Math.min(120, next.deltaY));
+        const zoomFactor = Math.exp(-normalizedDelta * 0.0015);
+        zoomBy(zoomFactor, next.mouseX, next.mouseY);
+      });
+    }
   }, [zoomBy]);
+
+  useEffect(() => {
+    return () => {
+      if (panRafRef.current !== null) {
+        window.cancelAnimationFrame(panRafRef.current);
+      }
+      if (zoomRafRef.current !== null) {
+        window.cancelAnimationFrame(zoomRafRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="canvas-surface" role="region" aria-label="Infinite canvas workspace" aria-busy={loadingPhase !== null}>
@@ -665,13 +744,11 @@ export const Canvas: React.FC<CanvasProps> = ({
               object={obj}
               selected={selectedObjectId === obj.id}
               onMove={(x, y) => {
-                updateObject(obj.id, { x, y });
-                emitUpdate(obj.id, { x, y });
+                moveObjectAndSync(obj.id, x, y);
               }}
               onDelete={() => deleteObjectAndSync(obj.id)}
               onResize={(width, height) => {
-                updateObject(obj.id, { width, height });
-                emitUpdate(obj.id, { width, height });
+                resizeObjectAndSync(obj.id, width, height);
               }}
             />
           ))}

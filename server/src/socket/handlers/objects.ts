@@ -352,6 +352,49 @@ function buildUpdateData(existing: PrismaCanvasObject, updates: Record<string, u
   return data;
 }
 
+function hasEffectiveUpdate(
+  existing: PrismaCanvasObject,
+  data: Prisma.CanvasObjectUpdateInput
+): boolean {
+  const currentByKey: Record<string, unknown> = {
+    x: existing.x,
+    y: existing.y,
+    rotation: existing.rotation,
+    zIndex: existing.zIndex,
+    width: existing.width,
+    height: existing.height,
+    fontSize: existing.fontSize,
+    fillColor: existing.fillColor,
+    color: existing.color,
+    content: existing.content,
+    backgroundColor: existing.backgroundColor,
+    mediaUrl: existing.mediaUrl,
+    mediaPublicId: existing.mediaPublicId,
+    mediaResourceType: existing.mediaResourceType,
+    mediaFormat: existing.mediaFormat,
+    mediaWidth: existing.mediaWidth,
+    mediaHeight: existing.mediaHeight,
+    mediaCreatedAt: existing.mediaCreatedAt,
+    mimeType: existing.mimeType,
+    sizeBytes: existing.sizeBytes,
+    durationMs: existing.durationMs,
+  };
+
+  for (const [key, nextValue] of Object.entries(data)) {
+    const currentValue = currentByKey[key];
+    if (nextValue instanceof Date && currentValue instanceof Date) {
+      if (nextValue.getTime() !== currentValue.getTime()) return true;
+      continue;
+    }
+
+    if (!Object.is(currentValue, nextValue)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 const prismaObjectRepository: ObjectRepository = {
   async createObject(data) {
     return prisma.canvasObject.create({ data });
@@ -608,6 +651,14 @@ export function registerObjectHandlersWithRepository(io: Server, repository: Obj
         }
 
         const updateData = buildUpdateData(existing, updates);
+
+        if (Object.keys(updateData).length === 0) {
+          return;
+        }
+
+        if (!hasEffectiveUpdate(existing, updateData)) {
+          return;
+        }
 
         await repository.updateObject(existing.id, updateData);
 

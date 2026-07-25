@@ -1,4 +1,4 @@
-import { FC, useMemo, useState } from 'react';
+import { FC, useCallback, useMemo, useState } from 'react';
 import { useConnectionStatus } from './hooks/useConnectionStatus.js';
 import { useCreateSession } from './hooks/useAuth.js';
 import { useCreateRoom, useJoinRoom, useLeaveRoom, useRoomAutoRejoin, useRoomUserJoined, useRoomUserLeft } from './hooks/useRoom.js';
@@ -73,8 +73,7 @@ const App: FC = () => {
     }
   };
 
-  // Listen for participant joins
-  useRoomUserJoined((participant) => {
+  const handleUserJoined = useCallback((participant: Record<string, unknown>) => {
     useRoomStore.getState().addParticipant({
       id: participant.id as string,
       roomId: participant.roomId as string,
@@ -83,12 +82,15 @@ const App: FC = () => {
       lastSeenAt: participant.lastSeenAt as string,
       isActive: participant.isActive as boolean,
     });
-  });
+  }, []);
 
-  // Listen for participant leaves
-  useRoomUserLeft((participantId) => {
+  const handleUserLeft = useCallback((participantId: string) => {
     useRoomStore.getState().removeParticipant(participantId);
-  });
+  }, []);
+
+  // Listen for participant lifecycle events.
+  useRoomUserJoined(handleUserJoined);
+  useRoomUserLeft(handleUserLeft);
 
   const handleCreateSession = async () => {
     try {

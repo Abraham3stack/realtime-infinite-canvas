@@ -1220,6 +1220,75 @@ Reach stable performance and correctness with realistic judging load.
 - No UI overlap or responsive regressions
 - Documentation updated
 
+### Status
+
+✅ COMPLETE
+
+### ✅ Completed
+
+- Client interaction hardening in `Canvas.tsx`:
+  - requestAnimationFrame-based pan batching
+  - wheel/zoom coalescing to reduce high-frequency update pressure
+  - move/resize no-op suppression before socket emit
+  - JSON export normalization for persisted media dimensions
+- Renderer optimization in `ObjectRenderer.tsx`:
+  - `React.memo` with focused comparator for object + selection props
+- State update isolation in `client/src/store/objects.ts`:
+  - no-op short-circuit in `updateObject`
+  - single-index replacement instead of broad array remap
+- Socket/DB write suppression in `server/src/socket/handlers/objects.ts`:
+  - no-op update short-circuit before Prisma update/broadcast
+- Presence listener stability in `client/src/App.tsx`:
+  - memoized room participant callbacks to reduce listener churn
+- Media resource cleanup hardening:
+  - image/audio/video cleanup paths release source/listener references
+- Realtime stress validation completed in browser:
+  - synchronized large room with 506 objects (500 rectangles + 6 media)
+  - concurrent participants validated at 6+ active users
+  - late join hydration validated at full object count
+  - reconnect recovery validated after repeated server restarts
+- Regression gates passed:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run build`
+  - `npm test`
+- Deterministic collision-closure evidence captured in `docs/validation/phase4_collision_evidence_2026-07-25.json`:
+  - previous split-brain signal not reproduced as a persisted/server divergence
+  - single canonical PostgreSQL row preserved for target object during reruns
+  - no duplicate persisted objects detected
+  - all controlled clients remained converged on identical object state and JSON export values
+  - prior divergence classified as validation-harness artifact (synthetic Konva mutation + stalled deferred executions + stale session contamination)
+
+### 🧪 Latest Validation Snapshot
+
+- Current single-run load measurement (browser automation, local env):
+  - 100 objects: create+sync 3573ms, pan interaction 175ms, zoom burst 364ms
+  - 250 objects: create+sync 8600ms, pan interaction 178ms, zoom burst 333ms
+  - 500 objects: create+sync 17007ms, pan interaction 177ms, zoom burst 336ms
+- High-load collaboration room:
+  - object count convergence across clients: 506
+  - participant convergence observed: 6 to 7 active (all clients aligned after reconnect)
+  - post-restart recovery: connected/in-room/count restored across active tabs
+- Deterministic closure rerun (6 controlled participants, fresh room):
+  - target object remained single-instance (`dupCount=1`) on every client and in PostgreSQL
+  - exported JSON object state matched in-memory and PostgreSQL state across checks
+  - reconnect during active edit attempts recovered all clients without object duplication
+  - websocket handshake reset logs occurred only during intentional server restart windows
+- Resize automation stability rerun (single browser, fresh-room loop):
+  - 100 consecutive iterations passed with per-iteration checks for handle `mousedown`, `dragstart`, `dragmove`, `dragend`
+  - each iteration validated width/height mutation and JSON export dimension parity
+  - synchronization evidence observed on every iteration via outbound `object:update` websocket frames
+- Final browser smoke gate (create/select/drag/resize/export/sync):
+  - create and select passed for fresh objects
+  - drag path passed with persisted position updates
+  - resize path passed with persisted width/height updates
+  - export payload matched in-memory object state and synchronization events
+
+### 📝 Technical Debt
+
+- Add deterministic perf/regression harness for repeatable before/after comparisons (same room fixture, scripted warmup, and consolidated output artifact).
+- Add explicit server-side metric counters (no-op updates dropped, updates persisted, broadcasts sent) to quantify socket and DB write reduction during stress tests.
+
 ---
 
 ## Phase 5 - Creative Features (Priority Order)

@@ -36,6 +36,8 @@ export const AudioShape: React.FC<ShapeProps> = ({ object, selected, onMove, onR
       audio.pause();
       audio.currentTime = 0;
       audio.removeEventListener('ended', onEnded);
+      audio.src = '';
+      audioRef.current = null;
     };
   }, [object.mediaUrl]);
 
