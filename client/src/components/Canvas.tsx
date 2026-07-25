@@ -66,7 +66,7 @@ export const Canvas: React.FC = () => {
     if (!room) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note
+      // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note, I=Image, A=Audio
       // Create object at center of current viewport
       const centerX = (stageSize.width / 2 - offsetX) / scale;
       const centerY = (stageSize.height / 2 - offsetY) / scale;
@@ -120,6 +120,36 @@ export const Canvas: React.FC = () => {
         case 's': {
           e.preventDefault();
           const id = addObject('sticky-note', centerX, centerY);
+          const obj = useCanvasObjectsStore.getState().getObject(id);
+          if (obj && room) {
+            const operationId = generateOperationId();
+            pendingOperations.current.add(operationId);
+            socket.emit('object:create', {
+              operationId,
+              roomId: room.id,
+              object: obj,
+            });
+          }
+          break;
+        }
+        case 'i': {
+          e.preventDefault();
+          const id = addObject('image', centerX, centerY);
+          const obj = useCanvasObjectsStore.getState().getObject(id);
+          if (obj && room) {
+            const operationId = generateOperationId();
+            pendingOperations.current.add(operationId);
+            socket.emit('object:create', {
+              operationId,
+              roomId: room.id,
+              object: obj,
+            });
+          }
+          break;
+        }
+        case 'a': {
+          e.preventDefault();
+          const id = addObject('audio', centerX, centerY);
           const obj = useCanvasObjectsStore.getState().getObject(id);
           if (obj && room) {
             const operationId = generateOperationId();
@@ -304,6 +334,19 @@ export const Canvas: React.FC = () => {
                   operationId,
                   roomId: room.id,
                   objectId: obj.id,
+                });
+              }
+            }}
+            onResize={(width, height) => {
+              updateObject(obj.id, { width, height });
+              if (room) {
+                const operationId = generateOperationId();
+                pendingOperations.current.add(operationId);
+                socket.emit('object:update', {
+                  operationId,
+                  roomId: room.id,
+                  objectId: obj.id,
+                  updates: { width, height },
                 });
               }
             }}

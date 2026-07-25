@@ -103,16 +103,13 @@ export interface CursorUpdatedPayload {
 export interface ObjectCreatePayload {
   operationId: string;
   roomId: string;
-  clientTs: Date;
-  object: Omit<CanvasObject, 'createdAt' | 'updatedAt' | 'version'>;
+  object: CanvasObject;
 }
 
 // Server -> Room: object:created
 export interface ObjectCreatedPayload {
   operationId: string;
   object: CanvasObject;
-  version: number;
-  serverSeq: number;
   serverTs: Date;
 }
 
@@ -120,19 +117,15 @@ export interface ObjectCreatedPayload {
 export interface ObjectUpdatePayload {
   operationId: string;
   roomId: string;
-  clientTs: Date;
   objectId: string;
-  patch: CanvasObjectPatch;
-  baseVersion?: number;
+  updates: CanvasObjectPatch;
 }
 
 // Server -> Room: object:updated
 export interface ObjectUpdatedPayload {
   operationId: string;
   objectId: string;
-  patchApplied: CanvasObjectPatch;
-  newVersion: number;
-  serverSeq: number;
+  updates: CanvasObjectPatch;
   serverTs: Date;
 }
 
@@ -140,7 +133,6 @@ export interface ObjectUpdatedPayload {
 export interface ObjectDeletePayload {
   operationId: string;
   roomId: string;
-  clientTs: Date;
   objectId: string;
 }
 
@@ -148,7 +140,6 @@ export interface ObjectDeletePayload {
 export interface ObjectDeletedPayload {
   operationId: string;
   objectId: string;
-  serverSeq: number;
   serverTs: Date;
 }
 

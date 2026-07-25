@@ -6,16 +6,21 @@ import { CanvasObject } from '../../store/objects.js';
 interface ShapeProps {
   object: CanvasObject;
   onMove: (x: number, y: number) => void;
+  onResize: (width: number, height: number) => void;
   onDelete: () => void;
 }
 
 export const StickyNoteShape: React.FC<ShapeProps> = ({
   object,
   onMove,
+  onResize,
   onDelete,
 }) => {
   const groupRef = useRef<Konva.Group>(null);
   const rectRef = useRef<Konva.Rect>(null);
+
+  const HANDLE_SIZE = 10;
+  const MIN_SIZE = 40;
 
   const handleDragStart = useCallback(() => {
     // Visual feedback
@@ -29,9 +34,16 @@ export const StickyNoteShape: React.FC<ShapeProps> = ({
     onDelete();
   }, [onDelete]);
 
+  const handleResizeEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    const nextWidth = Math.max(MIN_SIZE, e.target.x() + HANDLE_SIZE);
+    const nextHeight = Math.max(MIN_SIZE, e.target.y() + HANDLE_SIZE);
+    onResize(nextWidth, nextHeight);
+  }, [onResize]);
+
   return (
     <Group
       ref={groupRef}
+      id={object.id}
       x={object.x}
       y={object.y}
       draggable
@@ -71,6 +83,22 @@ export const StickyNoteShape: React.FC<ShapeProps> = ({
         wrap="word"
         verticalAlign="top"
         pointerEvents="none"
+      />
+      <Rect
+        x={Math.max(0, object.width - HANDLE_SIZE)}
+        y={Math.max(0, object.height - HANDLE_SIZE)}
+        width={HANDLE_SIZE}
+        height={HANDLE_SIZE}
+        fill="#0f172a"
+        cornerRadius={2}
+        draggable
+        onMouseDown={(e) => {
+          e.cancelBubble = true;
+        }}
+        onTouchStart={(e) => {
+          e.cancelBubble = true;
+        }}
+        onDragEnd={handleResizeEnd}
       />
     </Group>
   );

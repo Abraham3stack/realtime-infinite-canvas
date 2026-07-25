@@ -103,79 +103,45 @@ export const CursorUpdatedPayloadSchema = z.object({
 
 // object:create
 export const ObjectCreatePayloadSchema = z.object({
-  operationId: z.string().uuid(),
+  operationId: z.string().min(1),
   roomId: z.string().uuid(),
-  clientTs: z.date(),
-  object: z.object({
-    id: z.string().uuid(),
-    roomId: z.string().uuid(),
-    type: z.enum(['text', 'shape', 'sticky', 'image', 'audio']),
-    x: z.number().finite(),
-    y: z.number().finite(),
-    zIndex: z.number().int(),
-    rotation: z.number().finite().optional(),
-    createdBySessionId: z.string().uuid(),
-    width: z.number().positive().finite().optional(),
-    height: z.number().positive().finite().optional(),
-    content: z.string().optional(),
-    shapeType: z.enum(['rectangle', 'circle', 'triangle']).optional(),
-    fillColor: z.string().optional(),
-    strokeColor: z.string().optional(),
-    fontSize: z.number().optional(),
-    fontFamily: z.string().optional(),
-    color: z.string().optional(),
-    mediaUrl: z.string().optional(),
-    mediaPublicId: z.string().optional(),
-    mimeType: z.string().optional(),
-    sizeBytes: z.number().optional(),
-    durationMs: z.number().optional(),
-    backgroundColor: z.string().optional(),
-    textColor: z.string().optional(),
-  }),
+  object: CanvasObjectSchema,
 });
 
 // object:created
 export const ObjectCreatedPayloadSchema = z.object({
-  operationId: z.string().uuid(),
+  operationId: z.string().min(1),
   object: CanvasObjectSchema,
-  version: z.number().int().positive(),
-  serverSeq: z.number().int().nonnegative(),
   serverTs: z.date(),
 });
 
 // object:update
 export const ObjectUpdatePayloadSchema = z.object({
-  operationId: z.string().uuid(),
+  operationId: z.string().min(1),
   roomId: z.string().uuid(),
-  clientTs: z.date(),
-  objectId: z.string().uuid(),
-  patch: CanvasObjectPatchSchema,
-  baseVersion: z.number().int().positive().optional(),
+  objectId: z.string().min(1),
+  updates: CanvasObjectPatchSchema,
 });
 
 // object:updated
 export const ObjectUpdatedPayloadSchema = z.object({
-  operationId: z.string().uuid(),
-  objectId: z.string().uuid(),
-  patchApplied: CanvasObjectPatchSchema,
-  newVersion: z.number().int().positive(),
-  serverSeq: z.number().int().nonnegative(),
+  operationId: z.string().min(1),
+  objectId: z.string().min(1),
+  updates: CanvasObjectPatchSchema,
   serverTs: z.date(),
 });
 
 // object:delete
 export const ObjectDeletePayloadSchema = z.object({
-  operationId: z.string().uuid(),
+  operationId: z.string().min(1),
   roomId: z.string().uuid(),
-  clientTs: z.date(),
-  objectId: z.string().uuid(),
+  objectId: z.string().min(1),
 });
 
 // object:deleted
 export const ObjectDeletedPayloadSchema = z.object({
-  operationId: z.string().uuid(),
-  objectId: z.string().uuid(),
-  serverSeq: z.number().int().nonnegative(),
+  operationId: z.string().min(1),
+  objectId: z.string().min(1),
   serverTs: z.date(),
 });
 

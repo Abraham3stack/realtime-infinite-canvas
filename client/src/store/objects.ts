@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 // Canvas object type definitions
-export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note';
+export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio';
 
 export interface CanvasObject {
   id: string;
@@ -14,6 +14,11 @@ export interface CanvasObject {
   color: string;
   text?: string;
   fontSize?: number;
+  mediaUrl?: string;
+  mediaPublicId?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  durationMs?: number;
   zIndex: number;
 }
 
@@ -42,6 +47,13 @@ export interface CanvasObjectsState {
 // Factory for default object properties by type
 const getDefaultProperties = (type: CanvasObjectType) => {
   const baseSize = 100;
+  // Phase 2 uses local placeholders. Phase 3 will replace these with uploaded media URLs.
+  const imagePlaceholder =
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220"><rect width="100%" height="100%" fill="#e2e8f0"/><rect x="24" y="24" width="272" height="172" rx="8" fill="#cbd5e1"/><circle cx="102" cy="94" r="18" fill="#94a3b8"/><path d="M66 170l48-46 42 34 40-50 58 62z" fill="#64748b"/><text x="160" y="204" text-anchor="middle" font-size="16" fill="#334155">Image</text></svg>'
+    );
+  const audioPlaceholder = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
   const defaults: Record<CanvasObjectType, Partial<CanvasObject>> = {
     rectangle: {
       width: baseSize,
@@ -66,6 +78,26 @@ const getDefaultProperties = (type: CanvasObjectType) => {
       color: '#f1c40f',
       text: 'Note',
       fontSize: 12,
+    },
+    image: {
+      width: 220,
+      height: 160,
+      color: '#cbd5e1',
+      mediaUrl: imagePlaceholder,
+      mediaPublicId: 'phase2-placeholder-image',
+      mimeType: 'image/svg+xml',
+      sizeBytes: imagePlaceholder.length,
+    },
+    audio: {
+      width: 220,
+      height: 80,
+      color: '#dbeafe',
+      text: 'Audio Placeholder',
+      mediaUrl: audioPlaceholder,
+      mediaPublicId: 'phase2-placeholder-audio',
+      mimeType: 'audio/wav',
+      sizeBytes: audioPlaceholder.length,
+      durationMs: 1000,
     },
   };
   return defaults[type];
@@ -94,6 +126,11 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
       color: defaults.color ?? '#3498db',
       text: defaults.text,
       fontSize: defaults.fontSize,
+      mediaUrl: defaults.mediaUrl,
+      mediaPublicId: defaults.mediaPublicId,
+      mimeType: defaults.mimeType,
+      sizeBytes: defaults.sizeBytes,
+      durationMs: defaults.durationMs,
       zIndex: state.nextZIndex,
     };
 

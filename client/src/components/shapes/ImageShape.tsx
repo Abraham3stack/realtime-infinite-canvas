@@ -1,5 +1,5 @@
-import React, { useRef, useCallback } from 'react';
-import { Text as KonvaText, Group, Rect } from 'react-konva';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Group, Image as KonvaImage, Rect, Text as KonvaText } from 'react-konva';
 import Konva from 'konva';
 import { CanvasObject } from '../../store/objects.js';
 
@@ -12,15 +12,23 @@ interface ShapeProps {
 
 const HANDLE_SIZE = 10;
 const MIN_WIDTH = 80;
-const MIN_HEIGHT = 32;
+const MIN_HEIGHT = 60;
 
-export const TextShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDelete }) => {
-  const textRef = useRef<Konva.Text>(null);
+export const ImageShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDelete }) => {
   const groupRef = useRef<Konva.Group>(null);
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
 
-  const handleDragStart = useCallback(() => {
-    // Visual feedback
-  }, []);
+  useEffect(() => {
+    if (!object.mediaUrl) {
+      setImage(null);
+      return;
+    }
+
+    const img = new window.Image();
+    img.onload = () => setImage(img);
+    img.onerror = () => setImage(null);
+    img.src = object.mediaUrl;
+  }, [object.mediaUrl]);
 
   const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     onMove(e.target.x(), e.target.y());
@@ -43,25 +51,25 @@ export const TextShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDe
       x={object.x}
       y={object.y}
       draggable
-      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >
-      <KonvaText
-        ref={textRef}
-        text={object.text || 'Text'}
-        fontSize={object.fontSize || 14}
-        fill={object.color}
-        fontFamily="Arial, sans-serif"
-        width={object.width}
-        height={object.height}
-        onMouseEnter={(e) => {
-          (e.target.getStage()?.container() as HTMLElement).style.cursor = 'pointer';
-        }}
-        onMouseLeave={(e) => {
-          (e.target.getStage()?.container() as HTMLElement).style.cursor = 'grab';
-        }}
-      />
+      <Rect width={object.width} height={object.height} fill="#e2e8f0" stroke="#334155" strokeWidth={1} cornerRadius={4} />
+      {image ? (
+        <KonvaImage image={image} width={object.width} height={object.height} cornerRadius={4} />
+      ) : (
+        <KonvaText
+          text="Image Placeholder"
+          x={8}
+          y={8}
+          width={object.width - 16}
+          height={object.height - 16}
+          fontSize={14}
+          fill="#334155"
+          verticalAlign="middle"
+          align="center"
+        />
+      )}
       <Rect
         x={Math.max(0, object.width - HANDLE_SIZE)}
         y={Math.max(0, object.height - HANDLE_SIZE)}

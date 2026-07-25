@@ -4,7 +4,7 @@ import { prisma } from '../../db/prisma.js';
 import { withNeonColdStartRetry } from '../../db/neonRetry.js';
 import { ErrorCodes } from '@realtime-canvas/shared';
 import type { AuthenticatedSocket } from '../types.js';
-import { initializeRoomObjects, getRoomObjects } from './objects.js';
+import { getRoomObjects } from './objects.js';
 
 const generateShareCode = customAlphabet('23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz', 6);
 
@@ -91,9 +91,6 @@ export function registerRoomHandlers(io: Server): void {
         // connected sockets in this room key.
         socket.join(room.id);
         authSocket.roomId = room.id;
-
-        // Initialize object storage for this room
-        initializeRoomObjects(room.id);
 
         callback({
           roomId: room.id,
@@ -208,11 +205,13 @@ export function registerRoomHandlers(io: Server): void {
         }));
 
         // Send the state snapshot directly to the joining socket.
+        const canvasObjects = await getRoomObjects(room.id);
+
         callback({
           roomId: room.id,
           title: room.title ?? `Room ${room.shareCode}`,
           participants: snapshotParticipants,
-          canvasObjects: getRoomObjects(room.id),
+          canvasObjects,
         });
 
         // Broadcast the new participant to all other sockets in the room.

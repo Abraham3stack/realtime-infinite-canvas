@@ -4,10 +4,13 @@ import { RectangleShape } from './shapes/RectangleShape.js';
 import { CircleShape } from './shapes/CircleShape.js';
 import { TextShape } from './shapes/TextShape.js';
 import { StickyNoteShape } from './shapes/StickyNoteShape.js';
+import { ImageShape } from './shapes/ImageShape.js';
+import { AudioShape } from './shapes/AudioShape.js';
 
 interface ObjectRendererProps {
   object: CanvasObject;
   onMove: (x: number, y: number) => void;
+  onResize: (width: number, height: number) => void;
   onDelete: () => void;
 }
 
@@ -22,6 +25,8 @@ const shapeComponentMap: Record<
   circle: CircleShape,
   text: TextShape,
   'sticky-note': StickyNoteShape,
+  image: ImageShape,
+  audio: AudioShape,
 };
 
 /**
@@ -32,6 +37,7 @@ const shapeComponentMap: Record<
 export const ObjectRenderer: React.FC<ObjectRendererProps> = ({
   object,
   onMove,
+  onResize,
   onDelete,
 }) => {
   const Component = shapeComponentMap[object.type];
@@ -41,5 +47,5 @@ export const ObjectRenderer: React.FC<ObjectRendererProps> = ({
     return null;
   }
 
-  return <Component object={object} onMove={onMove} onDelete={onDelete} />;
+  return <Component object={object} onMove={onMove} onResize={onResize} onDelete={onDelete} />;
 };

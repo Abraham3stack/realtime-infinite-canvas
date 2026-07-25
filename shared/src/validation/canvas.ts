@@ -2,76 +2,65 @@
 
 import { z } from 'zod';
 
-export const ObjectTypeSchema = z.enum(['text', 'shape', 'sticky', 'image', 'audio']);
+export const ObjectTypeSchema = z.enum(['rectangle', 'circle', 'text', 'sticky-note', 'image', 'audio']);
 
 const BaseCanvasObjectSchema = z.object({
-  id: z.string().uuid(),
-  roomId: z.string().uuid(),
+  id: z.string().min(1),
   type: ObjectTypeSchema,
   x: z.number().finite(),
   y: z.number().finite(),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
   zIndex: z.number().int(),
-  rotation: z.number().finite().optional(),
-  version: z.number().int().positive(),
-  createdBySessionId: z.string().uuid(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  deletedAt: z.date().optional(),
+  rotation: z.number().finite(),
 });
 
 export const TextObjectSchema = BaseCanvasObjectSchema.extend({
   type: z.literal('text'),
-  width: z.number().positive().finite(),
-  height: z.number().positive().finite(),
-  content: z.string(),
+  text: z.string().optional(),
   fontSize: z.number().positive().finite().optional(),
-  fontFamily: z.string().optional(),
-  color: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
+  color: z.string().optional(),
 });
 
-export const ShapeObjectSchema = BaseCanvasObjectSchema.extend({
-  type: z.literal('shape'),
-  width: z.number().positive().finite(),
-  height: z.number().positive().finite(),
-  shapeType: z.enum(['rectangle', 'circle', 'triangle']),
-  fillColor: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
-  strokeColor: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
-  strokeWidth: z.number().positive().finite().optional(),
+export const RectangleObjectSchema = BaseCanvasObjectSchema.extend({
+  type: z.literal('rectangle'),
+  color: z.string().optional(),
+});
+
+export const CircleObjectSchema = BaseCanvasObjectSchema.extend({
+  type: z.literal('circle'),
+  color: z.string().optional(),
 });
 
 export const StickyObjectSchema = BaseCanvasObjectSchema.extend({
-  type: z.literal('sticky'),
-  width: z.number().positive().finite(),
-  height: z.number().positive().finite(),
-  content: z.string(),
-  backgroundColor: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
-  textColor: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
+  type: z.literal('sticky-note'),
+  text: z.string().optional(),
+  color: z.string().optional(),
+  fontSize: z.number().positive().finite().optional(),
 });
 
 export const ImageObjectSchema = BaseCanvasObjectSchema.extend({
   type: z.literal('image'),
-  width: z.number().positive().finite(),
-  height: z.number().positive().finite(),
-  mediaUrl: z.string().url(),
-  mediaPublicId: z.string().min(1),
-  mimeType: z.string().regex(/^image\//),
-  sizeBytes: z.number().int().positive(),
+  mediaUrl: z.string().optional(),
+  mediaPublicId: z.string().optional(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
 });
 
 export const AudioObjectSchema = BaseCanvasObjectSchema.extend({
   type: z.literal('audio'),
-  width: z.number().positive().finite(),
-  height: z.number().positive().finite(),
-  mediaUrl: z.string().url(),
-  mediaPublicId: z.string().min(1),
-  mimeType: z.string().regex(/^audio\//),
-  sizeBytes: z.number().int().positive(),
-  durationMs: z.number().int().positive(),
+  text: z.string().optional(),
+  mediaUrl: z.string().optional(),
+  mediaPublicId: z.string().optional(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  durationMs: z.number().int().nonnegative().optional(),
 });
 
 export const CanvasObjectSchema = z.discriminatedUnion('type', [
   TextObjectSchema,
-  ShapeObjectSchema,
+  RectangleObjectSchema,
+  CircleObjectSchema,
   StickyObjectSchema,
   ImageObjectSchema,
   AudioObjectSchema,
@@ -84,22 +73,24 @@ export const CanvasObjectPatchSchema = z.object({
   rotation: z.number().finite().optional(),
   width: z.number().positive().finite().optional(),
   height: z.number().positive().finite().optional(),
-  content: z.string().optional(),
-  shapeType: z.enum(['rectangle', 'circle', 'triangle']).optional(),
-  fillColor: z.string().optional(),
-  strokeColor: z.string().optional(),
-  fontFamily: z.string().optional(),
+  color: z.string().optional(),
+  text: z.string().optional(),
   fontSize: z.number().optional(),
+  mediaUrl: z.string().optional(),
+  mediaPublicId: z.string().optional(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  durationMs: z.number().int().nonnegative().optional(),
 });
 
 export const CanvasSnapshotSchema = z.object({
   objects: z.array(CanvasObjectSchema),
-  lastServerSeq: z.number().int().nonnegative(),
 });
 
 export type ObjectType = z.infer<typeof ObjectTypeSchema>;
 export type TextObject = z.infer<typeof TextObjectSchema>;
-export type ShapeObject = z.infer<typeof ShapeObjectSchema>;
+export type RectangleObject = z.infer<typeof RectangleObjectSchema>;
+export type CircleObject = z.infer<typeof CircleObjectSchema>;
 export type StickyObject = z.infer<typeof StickyObjectSchema>;
 export type ImageObject = z.infer<typeof ImageObjectSchema>;
 export type AudioObject = z.infer<typeof AudioObjectSchema>;
