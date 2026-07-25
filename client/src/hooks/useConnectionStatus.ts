@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { socket } from '../socket';
+import { socket } from '../socket.js';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -15,9 +15,16 @@ export function useConnectionStatus() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Only attempt connection if socket has auth (token) available.
+    // This prevents unauthenticated connection attempts.
+    const hasAuth = socket.auth && typeof socket.auth === 'object' && 'token' in socket.auth;
+    if (!hasAuth) {
+      return;
+    }
+
     setStatus('connecting');
     // Initiate the WebSocket handshake. The socket was created with autoConnect: false
-    // so no connection is attempted until the app shell has rendered.
+    // so no connection is attempted until the app shell has rendered AND a token is available.
     socket.connect();
 
     const onConnect = () => {

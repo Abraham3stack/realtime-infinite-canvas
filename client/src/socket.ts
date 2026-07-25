@@ -12,3 +12,15 @@ export const socket: Socket = io(SERVER_URL, {
   // Prefer WebSocket, fall back to long-polling if WS is unavailable.
   transports: ['websocket', 'polling'],
 });
+
+// setSocketToken updates the socket's auth token and reconnects if needed.
+// Called after user creates or validates a guest session.
+export function setSocketToken(token: string): void {
+  socket.auth = { token };
+  if (!socket.connected) {
+    socket.connect();
+  } else {
+    socket.disconnect().connect();
+  }
+}
+
