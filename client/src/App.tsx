@@ -1,19 +1,35 @@
-import { FC, useState } from 'react';
+import { FC, useEffect, useMemo, useRef, useState } from 'react';
 import { useConnectionStatus } from './hooks/useConnectionStatus.js';
 import { useCreateSession } from './hooks/useAuth.js';
 import { useCreateRoom, useJoinRoom, useLeaveRoom, useRoomUserJoined, useRoomUserLeft } from './hooks/useRoom.js';
 import { useRoomStore } from './store/room.js';
 import { Canvas } from './components/Canvas.js';
+import { LoadingButton } from './components/ui/LoadingButton.js';
+import { SkeletonBlock } from './components/ui/SkeletonBlock.js';
+import { Spinner } from './components/ui/Spinner.js';
+import { StatusBadge } from './components/ui/StatusBadge.js';
 
-const STATUS_COLOR: Record<string, string> = {
-  connected: '#22c55e',
-  connecting: '#f59e0b',
-  disconnected: '#94a3b8',
-  error: '#ef4444',
+type ActionLoading = 'create-session' | 'create-room' | 'join-room' | 'leave-room' | null;
+type CopyLoading = 'room-id' | 'share-code' | null;
+type RoomLoadingPhase = 'idle' | 'connecting' | 'hydrating' | 'syncing';
+
+const ROOM_LOADING_COPY: Record<Exclude<RoomLoadingPhase, 'idle'>, { title: string; sub: string }> = {
+  connecting: {
+    title: 'Connecting...',
+    sub: 'Joining room and requesting initial state.',
+  },
+  hydrating: {
+    title: 'Hydrating objects...',
+    sub: 'Applying room data to your canvas.',
+  },
+  syncing: {
+    title: 'Loading canvas...',
+    sub: 'Finalizing realtime synchronization.',
+  },
 };
 
 const App: FC = () => {
-  const { status, error: connError } = useConnectionStatus();
+  const { status, statusLabel, reconnecting, error: connError } = useConnectionStatus();
   const {
     session,
     loading: sessionLoading,
@@ -30,6 +46,87 @@ const App: FC = () => {
   const [roomInput, setRoomInput] = useState('');
   const [roomIdOrCode, setRoomIdOrCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [loadingAction, setLoadingAction] = useState<ActionLoading>(null);
+  const [copyLoading, setCopyLoading] = useState<CopyLoading>(null);
+  const [roomLoadingPhase, setRoomLoadingPhase] = useState<RoomLoadingPhase>('idle');
+  const [showRoomSkeleton, setShowRoomSkeleton] = useState(false);
+  const previousStatus = useRef(status);
+  const hasStatusBootstrapped = useRef(false);
+
+  const connectedCount = useMemo(() => participants.filter((participant) => participant.isActive).length, [participants]);
+  const isRoomLoading = roomLoadingPhase !== 'idle';
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message: string) => {
+    setToast(message);
+  };
+
+  const beginRoomLoading = () => {
+    setShowRoomSkeleton(true);
+    setRoomLoadingPhase('connecting');
+  };
+
+  const completeRoomLoading = () => {
+    setRoomLoadingPhase('hydrating');
+
+    window.setTimeout(() => {
+      setRoomLoadingPhase('syncing');
+    }, 180);
+
+    window.setTimeout(() => {
+      setRoomLoadingPhase('idle');
+      setShowRoomSkeleton(false);
+    }, 900);
+  };
+
+  const copyToClipboard = async (value: string, label: string, loadingKey: Exclude<CopyLoading, null>) => {
+    try {
+      setCopyLoading(loadingKey);
+      await navigator.clipboard.writeText(value);
+      showToast(`✓ ${label} copied`);
+    } catch {
+      showToast(`Unable to copy ${label.toLowerCase()}`);
+    } finally {
+      setCopyLoading(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasStatusBootstrapped.current) {
+      hasStatusBootstrapped.current = true;
+      previousStatus.current = status;
+      return;
+    }
+
+    const prev = previousStatus.current;
+    if (prev === status) return;
+
+    if ((status === 'disconnected' || status === 'error') && (prev === 'connected' || prev === 'connecting')) {
+      showToast('✓ Connection lost');
+    }
+
+    if (status === 'connecting' && prev !== 'connecting') {
+      showToast('✓ Reconnecting...');
+    }
+
+    if (status === 'connected' && (prev === 'disconnected' || prev === 'error' || prev === 'connecting')) {
+      showToast(prev === 'connecting' ? '✓ Reconnected' : '✓ Connection restored');
+    }
+
+    previousStatus.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    if (!room && roomLoadingPhase === 'idle') {
+      setShowRoomSkeleton(false);
+    }
+  }, [room, roomLoadingPhase]);
 
   // Listen for participant joins
   useRoomUserJoined((participant) => {
@@ -55,19 +152,30 @@ const App: FC = () => {
         setError('Please enter a display name');
         return;
       }
+      setLoadingAction('create-session');
       await createSession(displayName);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create session');
+    } finally {
+      setLoadingAction(null);
     }
   };
 
   const handleCreateRoom = async () => {
     try {
       setError(null);
+      setLoadingAction('create-room');
+      beginRoomLoading();
       await createRoom(roomInput || undefined);
+      completeRoomLoading();
       setRoomInput('');
+      showToast('✓ Room created');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create room');
+      setRoomLoadingPhase('idle');
+      setShowRoomSkeleton(false);
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -78,6 +186,8 @@ const App: FC = () => {
         setError('Please enter a room ID or share code');
         return;
       }
+      setLoadingAction('join-room');
+      beginRoomLoading();
       // Check if it's a UUID (looks like one) or a share code
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomIdOrCode);
       if (isUUID) {
@@ -85,344 +195,282 @@ const App: FC = () => {
       } else {
         await joinRoom(undefined, roomIdOrCode);
       }
+      completeRoomLoading();
+      showToast('✓ Joined room');
       setRoomIdOrCode('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join room');
+      setRoomLoadingPhase('idle');
+      setShowRoomSkeleton(false);
+    } finally {
+      setLoadingAction(null);
     }
   };
 
   const handleLeaveRoom = async () => {
     try {
       setError(null);
+      setLoadingAction('leave-room');
       await leaveRoom();
+      showToast('✓ Left room');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to leave room');
+    } finally {
+      setLoadingAction(null);
     }
   };
 
   return (
-    <>
-      {/* When in a room: full-screen split layout (sidebar + canvas) */}
+    <div className="app-shell">
       {room ? (
-        <div style={{ display: 'flex', height: '100vh', width: '100vw' }}>
-          {/* Control Panel Sidebar */}
-          <div style={{
-            width: '400px',
-            borderRight: '1px solid #e2e8f0',
-            overflowY: 'auto',
-            padding: '2rem',
-            fontFamily: 'system-ui, sans-serif',
-            background: '#ffffff',
-          }}>
-            <h1 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Realtime Canvas</h1>
-
-            {/* Connection Status */}
-            <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-              <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem', color: '#64748b' }}>
-                SERVER CONNECTION
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: '50%',
-                    backgroundColor: STATUS_COLOR[status] ?? STATUS_COLOR.disconnected,
-                    display: 'inline-block',
-                  }}
-                />
-                <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{status}</span>
+        <div className="room-layout">
+          <aside className="room-panel" aria-label="Room control panel">
+            <header className="panel-header">
+              <div>
+                <p className="eyebrow">Realtime Infinite Canvas</p>
+                <h1 className="panel-title">Collaborative Session</h1>
               </div>
+              <span className="participant-badge" title="Active participants">
+                {connectedCount} active
+              </span>
+            </header>
+
+            <section className="info-grid" aria-label="Room information cards">
+              <article className="info-card">
+                <p className="card-label">Connection</p>
+                <StatusBadge status={status} label={statusLabel} />
+                {connError && <p className="inline-error">{connError}</p>}
+                {reconnecting ? <p className="subtle-text">Attempting automatic reconnection...</p> : null}
+              </article>
+
+              <article className="info-card">
+                <p className="card-label">Room ID</p>
+                {showRoomSkeleton ? <SkeletonBlock className="skeleton-line skeleton-room-meta" /> : <p className="mono-value">{room.id}</p>}
+                <LoadingButton
+                  className="ghost-btn"
+                  type="button"
+                  onClick={() => copyToClipboard(room.id, 'Room ID', 'room-id')}
+                  loading={copyLoading === 'room-id'}
+                  loadingLabel="Copying..."
+                  disabled={isRoomLoading}
+                  aria-label="Copy room ID"
+                >
+                  Copy
+                </LoadingButton>
+              </article>
+
+              <article className="info-card">
+                <p className="card-label">Share Code</p>
+                {showRoomSkeleton ? <SkeletonBlock className="skeleton-line skeleton-share-code" /> : <p className="mono-value large room-code-value">{room.shareCode}</p>}
+                <LoadingButton
+                  className="ghost-btn"
+                  type="button"
+                  onClick={() => copyToClipboard(room.shareCode, 'Share code', 'share-code')}
+                  loading={copyLoading === 'share-code'}
+                  loadingLabel="Copying..."
+                  disabled={isRoomLoading}
+                  aria-label="Copy room share code"
+                >
+                  Copy
+                </LoadingButton>
+              </article>
+
+              <article className="info-card">
+                <p className="card-label">Session</p>
+                {showRoomSkeleton ? (
+                  <>
+                    <SkeletonBlock className="skeleton-line skeleton-name" />
+                    <SkeletonBlock className="skeleton-line skeleton-session" />
+                  </>
+                ) : (
+                  <>
+                    <p className="card-strong">{session?.displayName ?? 'Guest'}</p>
+                    <p className="subtle-text">{session?.sessionId.slice(0, 8)}...</p>
+                  </>
+                )}
+              </article>
             </section>
 
-            {/* Session Info */}
-            <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-              <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem', color: '#64748b' }}>
-                GUEST SESSION
-              </h2>
-              <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                <strong>Name:</strong> {session?.displayName}
-              </p>
-              <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                <strong>Session ID:</strong> {session?.sessionId.slice(0, 8)}...
-              </p>
-            </section>
-
-            {/* Room Display */}
-            <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-              <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem', color: '#64748b' }}>
-                CURRENT ROOM
-              </h2>
-              <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                <strong>Title:</strong> {room.title}
-              </p>
-              <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                <strong>Share Code:</strong> {room.shareCode}
-              </p>
-              <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                <strong>Room ID:</strong> {room.id.slice(0, 8)}...
-              </p>
-              <button
-                onClick={handleLeaveRoom}
-                style={{
-                  marginTop: '0.75rem',
-                  padding: '0.5rem 1rem',
-                  background: '#ef4444',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  width: '100%',
-                }}
-              >
-                Leave Room
-              </button>
-            </section>
-
-            {/* Participants */}
-            <section>
-              <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: '#64748b' }}>
-                PARTICIPANTS ({participants.length})
-              </h2>
-              {participants.length === 0 ? (
-                <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No participants yet</p>
+            <section className="participants-card" aria-label="Participants list" aria-busy={isRoomLoading}>
+              <div className="participants-header">
+                <h2>Participants</h2>
+                <span>{participants.length}</span>
+              </div>
+              {showRoomSkeleton ? (
+                <div className="participants-skeleton" aria-hidden="true">
+                  <SkeletonBlock className="skeleton-line skeleton-participant" />
+                  <SkeletonBlock className="skeleton-line skeleton-participant" />
+                  <SkeletonBlock className="skeleton-line skeleton-participant" />
+                </div>
+              ) : participants.length === 0 ? (
+                <p className="empty-state">Nobody has joined this room yet.</p>
               ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {participants.map((p) => (
-                    <li
-                      key={p.id}
-                      style={{
-                        padding: '0.5rem',
-                        background: '#f8fafc',
-                        borderRadius: '4px',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 500 }}>{p.displayName}</span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          {p.isActive ? '🟢 Active' : '⚫ Inactive'}
-                        </span>
+                <ul className="participant-list">
+                  {participants.map((participant) => (
+                    <li key={participant.id} className="participant-item">
+                      <div>
+                        <p className="participant-name">{participant.displayName}</p>
+                        <p className="participant-meta">Joined {new Date(participant.joinedAt).toLocaleTimeString()}</p>
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                        Joined: {new Date(p.joinedAt).toLocaleTimeString()}
-                      </div>
+                      <span className={participant.isActive ? 'participant-status active' : 'participant-status'}>
+                        {participant.isActive ? 'Active' : 'Inactive'}
+                      </span>
                     </li>
                   ))}
                 </ul>
               )}
             </section>
-          </div>
 
-          {/* Canvas Workspace */}
-          <div style={{ flex: 1, background: '#fafafa' }}>
-            <Canvas />
-          </div>
+            <LoadingButton
+              className="danger-btn"
+              type="button"
+              onClick={handleLeaveRoom}
+              loading={loadingAction === 'leave-room'}
+              loadingLabel="Leaving..."
+              aria-label="Leave current room"
+            >
+              Leave Room
+            </LoadingButton>
+          </aside>
+
+          <main className="canvas-layout" aria-label="Canvas workspace">
+            <Canvas
+              participantCount={participants.length}
+              loadingPhase={isRoomLoading ? roomLoadingPhase : null}
+              loadingCopy={roomLoadingPhase === 'idle' ? null : ROOM_LOADING_COPY[roomLoadingPhase]}
+              onObjectDeleted={() => showToast('✓ Object deleted')}
+            />
+          </main>
         </div>
       ) : (
-        /* When not in a room: centered control panel */
-        <div style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif', maxWidth: '800px' }}>
-          <h1 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Realtime Infinite Canvas</h1>
+        <main className="entry-layout">
+          <section className="entry-card">
+            <header className="entry-header">
+              <p className="eyebrow">Realtime Infinite Canvas</p>
+              <h1>Build ideas together, instantly</h1>
+              <p className="subtle-text">Create a guest session, open a room, and share the code with collaborators.</p>
+            </header>
 
-          {/* Connection Status */}
-          <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-            <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem', color: '#64748b' }}>
-              SERVER CONNECTION
-            </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  backgroundColor: STATUS_COLOR[status] ?? STATUS_COLOR.disconnected,
-                  display: 'inline-block',
-                }}
-              />
-              <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{status}</span>
-            </div>
-            {connError && (
-              <p style={{ color: STATUS_COLOR.error, fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                {connError}
-              </p>
+            <article className="info-card entry-status-card">
+              <p className="card-label">Server Connection</p>
+              <StatusBadge status={status} label={statusLabel} />
+              {connError && <p className="inline-error">{connError}</p>}
+            </article>
+
+            {!session ? (
+              <section className="entry-section" aria-busy={sessionLoading}>
+                <h2>Create Guest Session</h2>
+                <div className="form-row">
+                  <input
+                    type="text"
+                    placeholder="Enter display name"
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    disabled={sessionLoading}
+                    className="text-input"
+                    aria-label="Display name"
+                  />
+                  <LoadingButton
+                    type="button"
+                    className="primary-btn"
+                    onClick={handleCreateSession}
+                    disabled={sessionLoading}
+                    loading={loadingAction === 'create-session'}
+                    loadingLabel={wakingDatabase ? 'Waking database...' : 'Creating session...'}
+                    aria-label="Create guest session"
+                  >
+                    Create Session
+                  </LoadingButton>
+                </div>
+                {sessionLoading && wakingDatabase && (
+                  <div className="loading-note" role="status" aria-live="polite">
+                    <Spinner size="md" />
+                    <div>
+                      <p className="card-strong">Waking up database...</p>
+                      <p className="subtle-text">This may take a few seconds on the free Neon plan.</p>
+                    </div>
+                  </div>
+                )}
+                {sessionError && <p className="inline-error">{sessionError}</p>}
+              </section>
+            ) : (
+              <>
+                <section className="entry-section">
+                  <h2>Guest Session</h2>
+                  <div className="session-summary">
+                    <p><strong>Name:</strong> {session.displayName}</p>
+                    <p><strong>Session ID:</strong> {session.sessionId.slice(0, 8)}...</p>
+                    <p><strong>Expires:</strong> {new Date(session.expiresAt).toLocaleTimeString()}</p>
+                  </div>
+                </section>
+
+                <section className="entry-section">
+                  <h2>Create New Room</h2>
+                  <div className="form-row">
+                    <input
+                      type="text"
+                      placeholder="Room title (optional)"
+                      value={roomInput}
+                      onChange={(event) => setRoomInput(event.target.value)}
+                      disabled={loadingAction === 'create-room'}
+                      className="text-input"
+                      aria-label="Room title"
+                    />
+                    <LoadingButton
+                      type="button"
+                      className="success-btn"
+                      onClick={handleCreateRoom}
+                      loading={loadingAction === 'create-room'}
+                      loadingLabel="Creating room..."
+                      aria-label="Create room"
+                    >
+                      Create Room
+                    </LoadingButton>
+                  </div>
+                </section>
+
+                <section className="entry-section">
+                  <h2>Join Existing Room</h2>
+                  <div className="form-row">
+                    <input
+                      type="text"
+                      placeholder="Room ID or Share Code"
+                      value={roomIdOrCode}
+                      onChange={(event) => setRoomIdOrCode(event.target.value)}
+                      disabled={loadingAction === 'join-room'}
+                      className="text-input"
+                      aria-label="Room ID or share code"
+                    />
+                    <LoadingButton
+                      type="button"
+                      className="accent-btn"
+                      onClick={handleJoinRoom}
+                      loading={loadingAction === 'join-room'}
+                      loadingLabel="Joining room..."
+                      aria-label="Join room"
+                    >
+                      Join Room
+                    </LoadingButton>
+                  </div>
+                </section>
+              </>
+            )}
+
+            {error && (
+              <div className="error-banner" role="alert">
+                <strong>Error:</strong> {error}
+              </div>
             )}
           </section>
+        </main>
+      )}
 
-          {/* Auth Section */}
-          {!session ? (
-            <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-              <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: '#64748b' }}>
-                CREATE GUEST SESSION
-              </h2>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  placeholder="Enter display name"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  disabled={sessionLoading}
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '4px',
-                    fontSize: '0.875rem',
-                    opacity: sessionLoading ? 0.7 : 1,
-                  }}
-                />
-                <button
-                  onClick={handleCreateSession}
-                  disabled={sessionLoading}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: sessionLoading ? 'not-allowed' : 'pointer',
-                    opacity: sessionLoading ? 0.5 : 1,
-                  }}
-                >
-                  {sessionLoading ? (wakingDatabase ? 'Waking up...' : 'Creating...') : 'Create Session'}
-                </button>
-              </div>
-              {sessionLoading && wakingDatabase && (
-                <div
-                  style={{
-                    marginTop: '0.75rem',
-                    display: 'flex',
-                    gap: '0.625rem',
-                    alignItems: 'flex-start',
-                    padding: '0.625rem 0.75rem',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    background: '#f8fafc',
-                  }}
-                >
-                  <span className="loading-spinner" aria-hidden="true" />
-                  <div>
-                    <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
-                      Waking up database...
-                    </p>
-                    <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.125rem' }}>
-                      This may take a few seconds on the free Neon plan.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {sessionError && (
-                <p style={{ color: STATUS_COLOR.error, fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                  {sessionError}
-                </p>
-              )}
-            </section>
-          ) : (
-            <>
-              {/* Session Display */}
-              <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-                <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem', color: '#64748b' }}>
-                  GUEST SESSION
-                </h2>
-                <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                  <strong>Name:</strong> {session.displayName}
-                </p>
-                <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                  <strong>Session ID:</strong> {session.sessionId.slice(0, 8)}...
-                </p>
-                <p style={{ fontSize: '0.875rem', margin: '0.25rem 0' }}>
-                  <strong>Expires:</strong> {new Date(session.expiresAt).toLocaleTimeString()}
-                </p>
-              </section>
-
-              {/* Room Operations */}
-              {!room ? (
-                <>
-                  {/* Create Room */}
-                  <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-                    <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: '#64748b' }}>
-                      CREATE NEW ROOM
-                    </h2>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input
-                        type="text"
-                        placeholder="Room title (optional)"
-                        value={roomInput}
-                        onChange={(e) => setRoomInput(e.target.value)}
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '4px',
-                          fontSize: '0.875rem',
-                        }}
-                      />
-                      <button
-                        onClick={handleCreateRoom}
-                        style={{
-                          padding: '0.5rem 1rem',
-                          background: '#10b981',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Create
-                      </button>
-                    </div>
-                  </section>
-
-                  {/* Join Room */}
-                  <section style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-                    <h2 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: '#64748b' }}>
-                      JOIN EXISTING ROOM
-                    </h2>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input
-                        type="text"
-                        placeholder="Room ID or Share Code"
-                        value={roomIdOrCode}
-                        onChange={(e) => setRoomIdOrCode(e.target.value)}
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '4px',
-                          fontSize: '0.875rem',
-                        }}
-                      />
-                      <button
-                        onClick={handleJoinRoom}
-                        style={{
-                          padding: '0.5rem 1rem',
-                          background: '#8b5cf6',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Join
-                      </button>
-                    </div>
-                  </section>
-                </>
-              ) : null}
-            </>
-          )}
-
-          {/* Error Display */}
-          {error && (
-            <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#fee2e2', borderRadius: '4px', border: '1px solid #fecaca' }}>
-              <p style={{ fontSize: '0.875rem', color: '#991b1b', margin: 0 }}>
-                <strong>Error:</strong> {error}
-              </p>
-            </div>
-          )}
+      {toast && (
+        <div className="app-toast" role="status" aria-live="polite">
+          {toast}
         </div>
       )}
-    </>
+    </div>
   );
 };
 

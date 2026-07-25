@@ -5,7 +5,9 @@ import { useViewportStore } from '../store/viewport.js';
 import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
 import { useRoomStore } from '../store/room.js';
 import { ObjectRenderer } from './ObjectRenderer.js';
+import { LoadingOverlay } from './ui/LoadingOverlay.js';
 import { socket } from '../socket.js';
+import type { CanvasObjectType } from '../store/objects.js';
 
 // Type definitions for socket payloads
 interface ObjectCreatedPayload {
@@ -27,9 +29,32 @@ interface ObjectDeletedPayload {
   serverTs: Date;
 }
 
-export const Canvas: React.FC = () => {
+interface CanvasProps {
+  participantCount: number;
+  loadingPhase?: 'connecting' | 'hydrating' | 'syncing' | null;
+  loadingCopy?: { title: string; sub: string } | null;
+  onObjectDeleted?: () => void;
+}
+
+const TOOLBAR_ITEMS: Array<{ type: CanvasObjectType; label: string; hotkey: string; icon: string }> = [
+  { type: 'rectangle', label: 'Rectangle', hotkey: 'R', icon: '[]' },
+  { type: 'circle', label: 'Circle', hotkey: 'C', icon: '()' },
+  { type: 'text', label: 'Text', hotkey: 'T', icon: 'T' },
+  { type: 'sticky-note', label: 'Sticky Note', hotkey: 'S', icon: 'SN' },
+  { type: 'image', label: 'Image', hotkey: 'I', icon: 'IMG' },
+  { type: 'audio', label: 'Audio', hotkey: 'A', icon: 'AUD' },
+];
+
+export const Canvas: React.FC<CanvasProps> = ({
+  participantCount,
+  loadingPhase = null,
+  loadingCopy = null,
+  onObjectDeleted,
+}) => {
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 1024, height: 768 });
+  const [activeTool, setActiveTool] = useState<CanvasObjectType | null>(null);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   
   // Viewport state: pan and zoom transforms
   const { offsetX, offsetY, scale, panBy, zoomBy } = useViewportStore((s) => ({
@@ -57,6 +82,70 @@ export const Canvas: React.FC = () => {
     return `op_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }, []);
 
+  const emitCreate = useCallback((object: CanvasObject) => {
+    if (!room) return;
+    const operationId = generateOperationId();
+    pendingOperations.current.add(operationId);
+    socket.emit('object:create', {
+      operationId,
+      roomId: room.id,
+      object,
+    });
+  }, [generateOperationId, room]);
+
+  const emitUpdate = useCallback((objectId: string, updates: Record<string, unknown>) => {
+    if (!room) return;
+    const operationId = generateOperationId();
+    pendingOperations.current.add(operationId);
+    socket.emit('object:update', {
+      operationId,
+      roomId: room.id,
+      objectId,
+      updates,
+    });
+  }, [generateOperationId, room]);
+
+  const emitDelete = useCallback((objectId: string) => {
+    if (!room) return;
+    const operationId = generateOperationId();
+    pendingOperations.current.add(operationId);
+    socket.emit('object:delete', {
+      operationId,
+      roomId: room.id,
+      objectId,
+    });
+  }, [generateOperationId, room]);
+
+  const createObjectAndSync = useCallback((type: CanvasObjectType) => {
+    if (!room) return;
+
+    const centerX = (stageSize.width / 2 - offsetX) / scale;
+    const centerY = (stageSize.height / 2 - offsetY) / scale;
+
+    const id = addObject(type, centerX, centerY);
+    const object = useCanvasObjectsStore.getState().getObject(id);
+    if (!object) return;
+
+    setActiveTool(type);
+    setSelectedObjectId(id);
+    emitCreate(object);
+  }, [addObject, emitCreate, offsetX, offsetY, room, scale, stageSize]);
+
+  const deleteObjectAndSync = useCallback((objectId: string) => {
+    deleteObject(objectId);
+    if (selectedObjectId === objectId) {
+      setSelectedObjectId(null);
+    }
+    emitDelete(objectId);
+    onObjectDeleted?.();
+  }, [deleteObject, emitDelete, onObjectDeleted, selectedObjectId]);
+
+  useEffect(() => {
+    if (!activeTool) return;
+    const timer = window.setTimeout(() => setActiveTool(null), 350);
+    return () => window.clearTimeout(timer);
+  }, [activeTool]);
+
   // Track mouse state for panning
   const isPanning = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -66,100 +155,41 @@ export const Canvas: React.FC = () => {
     if (!room) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note, I=Image, A=Audio
-      // Create object at center of current viewport
-      const centerX = (stageSize.width / 2 - offsetX) / scale;
-      const centerY = (stageSize.height / 2 - offsetY) / scale;
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+        return;
+      }
 
+      // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note, I=Image, A=Audio
       switch (e.key.toLowerCase()) {
         case 'r': {
           e.preventDefault();
-          const id = addObject('rectangle', centerX, centerY);
-          const obj = useCanvasObjectsStore.getState().getObject(id);
-          if (obj && room) {
-            const operationId = generateOperationId();
-            pendingOperations.current.add(operationId);
-            socket.emit('object:create', {
-              operationId,
-              roomId: room.id,
-              object: obj,
-            });
-          }
+          createObjectAndSync('rectangle');
           break;
         }
         case 'c': {
           e.preventDefault();
-          const id = addObject('circle', centerX, centerY);
-          const obj = useCanvasObjectsStore.getState().getObject(id);
-          if (obj && room) {
-            const operationId = generateOperationId();
-            pendingOperations.current.add(operationId);
-            socket.emit('object:create', {
-              operationId,
-              roomId: room.id,
-              object: obj,
-            });
-          }
+          createObjectAndSync('circle');
           break;
         }
         case 't': {
           e.preventDefault();
-          const id = addObject('text', centerX, centerY);
-          const obj = useCanvasObjectsStore.getState().getObject(id);
-          if (obj && room) {
-            const operationId = generateOperationId();
-            pendingOperations.current.add(operationId);
-            socket.emit('object:create', {
-              operationId,
-              roomId: room.id,
-              object: obj,
-            });
-          }
+          createObjectAndSync('text');
           break;
         }
         case 's': {
           e.preventDefault();
-          const id = addObject('sticky-note', centerX, centerY);
-          const obj = useCanvasObjectsStore.getState().getObject(id);
-          if (obj && room) {
-            const operationId = generateOperationId();
-            pendingOperations.current.add(operationId);
-            socket.emit('object:create', {
-              operationId,
-              roomId: room.id,
-              object: obj,
-            });
-          }
+          createObjectAndSync('sticky-note');
           break;
         }
         case 'i': {
           e.preventDefault();
-          const id = addObject('image', centerX, centerY);
-          const obj = useCanvasObjectsStore.getState().getObject(id);
-          if (obj && room) {
-            const operationId = generateOperationId();
-            pendingOperations.current.add(operationId);
-            socket.emit('object:create', {
-              operationId,
-              roomId: room.id,
-              object: obj,
-            });
-          }
+          createObjectAndSync('image');
           break;
         }
         case 'a': {
           e.preventDefault();
-          const id = addObject('audio', centerX, centerY);
-          const obj = useCanvasObjectsStore.getState().getObject(id);
-          if (obj && room) {
-            const operationId = generateOperationId();
-            pendingOperations.current.add(operationId);
-            socket.emit('object:create', {
-              operationId,
-              roomId: room.id,
-              object: obj,
-            });
-          }
+          createObjectAndSync('audio');
           break;
         }
       }
@@ -167,7 +197,7 @@ export const Canvas: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [addObject, stageSize, offsetX, offsetY, scale, room, generateOperationId]);
+  }, [createObjectAndSync, room]);
 
   // Socket event listeners for object synchronization
   useEffect(() => {
@@ -212,6 +242,7 @@ export const Canvas: React.FC = () => {
       }
 
       deleteObject(objectId);
+      setSelectedObjectId((current) => (current === objectId ? null : current));
     };
 
     socket.on('object:created', handleObjectCreated);
@@ -229,17 +260,31 @@ export const Canvas: React.FC = () => {
   useEffect(() => {
     const updateSize = () => {
       if (stageRef.current) {
-        const container = stageRef.current.container() as HTMLDivElement;
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          setStageSize({ width: rect.width, height: rect.height });
-        }
+        const stageContainer = stageRef.current.container() as HTMLDivElement;
+        const surface = stageContainer.parentElement as HTMLDivElement | null;
+        const measuredElement = surface ?? stageContainer;
+        const rect = measuredElement.getBoundingClientRect();
+
+        setStageSize({
+          width: Math.max(320, Math.floor(rect.width)),
+          height: Math.max(280, Math.floor(rect.height)),
+        });
       }
     };
 
     updateSize();
+    const stageContainer = stageRef.current?.container() as HTMLDivElement | undefined;
+    const surface = stageContainer?.parentElement as HTMLDivElement | null;
+    const resizeObserver = surface ? new ResizeObserver(updateSize) : null;
+    if (surface && resizeObserver) {
+      resizeObserver.observe(surface);
+    }
+
     window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
   }, []);
 
   // Mouse down: start panning (but not if clicking on an object)
@@ -247,12 +292,20 @@ export const Canvas: React.FC = () => {
     // Only pan on left mouse button (button 0) and only on Stage (not on objects)
     if (e.evt.button !== 0) return;
     
-    // Check if clicked on an object (descendants include shapes)
-    const clickedObject = e.target === e.target.getStage();
-    if (!clickedObject) return;
-    
-    isPanning.current = true;
-    lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY };
+    const clickedStage = e.target === e.target.getStage();
+
+    if (clickedStage) {
+      setSelectedObjectId(null);
+      isPanning.current = true;
+      lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY };
+      return;
+    }
+
+    const parentGroup = e.target.findAncestor('Group');
+    const objectId = parentGroup?.id();
+    if (objectId) {
+      setSelectedObjectId(objectId);
+    }
   }, []);
 
   // Mouse move: pan if dragging
@@ -286,73 +339,82 @@ export const Canvas: React.FC = () => {
   }, [zoomBy]);
 
   return (
-    <Stage
-      ref={stageRef}
-      width={stageSize.width}
-      height={stageSize.height}
-      x={offsetX}
-      y={offsetY}
-      scaleX={scale}
-      scaleY={scale}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
-      style={{
-        cursor: isPanning.current ? 'grabbing' : 'grab',
-        touchAction: 'none',
-      }}
-    >
-      <Layer>
-        {/* Render all canvas objects */}
-        {objects.map((obj) => (
-          <ObjectRenderer
-            key={obj.id}
-            object={obj}
-            onMove={(x, y) => {
-              updateObject(obj.id, { x, y });
-              // Emit socket event for movement
-              if (room) {
-                const operationId = generateOperationId();
-                pendingOperations.current.add(operationId);
-                socket.emit('object:update', {
-                  operationId,
-                  roomId: room.id,
-                  objectId: obj.id,
-                  updates: { x, y },
-                });
-              }
-            }}
-            onDelete={() => {
-              deleteObject(obj.id);
-              // Emit socket event for deletion
-              if (room) {
-                const operationId = generateOperationId();
-                pendingOperations.current.add(operationId);
-                socket.emit('object:delete', {
-                  operationId,
-                  roomId: room.id,
-                  objectId: obj.id,
-                });
-              }
-            }}
-            onResize={(width, height) => {
-              updateObject(obj.id, { width, height });
-              if (room) {
-                const operationId = generateOperationId();
-                pendingOperations.current.add(operationId);
-                socket.emit('object:update', {
-                  operationId,
-                  roomId: room.id,
-                  objectId: obj.id,
-                  updates: { width, height },
-                });
-              }
-            }}
-          />
-        ))}
-      </Layer>
-    </Stage>
+    <div className="canvas-surface" role="region" aria-label="Infinite canvas workspace" aria-busy={loadingPhase !== null}>
+      <div className="canvas-toolbar" role="toolbar" aria-label="Object creation toolbar">
+        <div className="tool-actions" aria-label="Shape tools">
+          {TOOLBAR_ITEMS.map((tool) => (
+            <button
+              key={tool.type}
+              type="button"
+              className={activeTool === tool.type ? 'tool-btn active' : 'tool-btn'}
+              onClick={() => createObjectAndSync(tool.type)}
+              title={`${tool.label} (${tool.hotkey})`}
+              aria-label={`${tool.label} (${tool.hotkey})`}
+            >
+              <span aria-hidden="true">{tool.icon}</span>
+            </button>
+          ))}
+        </div>
+        <div className="toolbar-meta">
+          <span className={loadingPhase ? 'users-chip users-chip--loading' : 'users-chip'} aria-label={`Users in room: ${participantCount}`}>
+            {loadingPhase ? 'Syncing...' : `${participantCount} users`}
+          </span>
+          {selectedObjectId && (
+            <button
+              type="button"
+              className="delete-btn"
+              onClick={() => deleteObjectAndSync(selectedObjectId)}
+              aria-label="Delete selected object"
+              title="Delete selected object"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+
+      {loadingPhase && loadingCopy ? <LoadingOverlay message={loadingCopy.title} subMessage={loadingCopy.sub} /> : null}
+
+      <Stage
+        ref={stageRef}
+        width={stageSize.width}
+        height={stageSize.height}
+        x={offsetX}
+        y={offsetY}
+        scaleX={scale}
+        scaleY={scale}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        style={{
+          cursor: isPanning.current ? 'grabbing' : 'grab',
+          touchAction: 'none',
+          borderRadius: '14px',
+          boxShadow: 'inset 0 0 0 1px rgba(148, 163, 184, 0.35)',
+          background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)',
+        }}
+      >
+        <Layer>
+          {objects.map((obj) => (
+            <ObjectRenderer
+              key={obj.id}
+              object={obj}
+              selected={selectedObjectId === obj.id}
+              onMove={(x, y) => {
+                updateObject(obj.id, { x, y });
+                emitUpdate(obj.id, { x, y });
+              }}
+              onDelete={() => deleteObjectAndSync(obj.id)}
+              onResize={(width, height) => {
+                updateObject(obj.id, { width, height });
+                emitUpdate(obj.id, { width, height });
+              }}
+            />
+          ))}
+        </Layer>
+      </Stage>
+    </div>
   );
 };

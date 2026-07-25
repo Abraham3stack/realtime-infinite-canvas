@@ -5,6 +5,7 @@ import { CanvasObject } from '../../store/objects.js';
 
 interface ShapeProps {
   object: CanvasObject;
+  selected: boolean;
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
@@ -14,7 +15,7 @@ const HANDLE_SIZE = 10;
 const MIN_WIDTH = 120;
 const MIN_HEIGHT = 56;
 
-export const AudioShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDelete }) => {
+export const AudioShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
   const groupRef = useRef<Konva.Group>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -81,7 +82,17 @@ export const AudioShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onD
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >
-      <Rect width={object.width} height={object.height} fill="#dbeafe" stroke="#1d4ed8" strokeWidth={1} cornerRadius={8} />
+      <Rect
+        width={object.width}
+        height={object.height}
+        fill="#dbeafe"
+        stroke={selected ? '#0f172a' : '#1d4ed8'}
+        strokeWidth={selected ? 2 : 1}
+        cornerRadius={8}
+        shadowColor={selected ? '#0f172a' : '#000'}
+        shadowBlur={selected ? 10 : 0}
+        shadowOpacity={selected ? 0.16 : 0}
+      />
       <Rect x={8} y={8} width={28} height={28} fill="#1d4ed8" cornerRadius={14} onClick={togglePlay} />
       <KonvaText text={isPlaying ? '||' : '>'} x={17} y={13} fontSize={14} fill="#ffffff" onClick={togglePlay} />
       <KonvaText text={object.text || 'Audio Placeholder'} x={46} y={12} fontSize={14} fill="#1e293b" width={Math.max(0, object.width - 54)} />
@@ -98,8 +109,9 @@ export const AudioShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onD
         y={Math.max(0, object.height - HANDLE_SIZE)}
         width={HANDLE_SIZE}
         height={HANDLE_SIZE}
-        fill="#0f172a"
+        fill={selected ? '#0f172a' : '#64748b'}
         cornerRadius={2}
+        visible={selected}
         draggable
         onMouseDown={(e) => {
           e.cancelBubble = true;

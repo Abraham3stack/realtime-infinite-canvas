@@ -5,6 +5,7 @@ import { CanvasObject } from '../../store/objects.js';
 
 interface ShapeProps {
   object: CanvasObject;
+  selected: boolean;
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
@@ -12,6 +13,7 @@ interface ShapeProps {
 
 export const StickyNoteShape: React.FC<ShapeProps> = ({
   object,
+  selected,
   onMove,
   onResize,
   onDelete,
@@ -57,11 +59,11 @@ export const StickyNoteShape: React.FC<ShapeProps> = ({
         width={object.width}
         height={object.height}
         fill={object.color}
-        stroke="#ccc"
-        strokeWidth={1}
+        stroke={selected ? '#0f172a' : '#ccc'}
+        strokeWidth={selected ? 2 : 1}
         shadowColor="#000"
-        shadowBlur={3}
-        shadowOpacity={0.1}
+        shadowBlur={selected ? 10 : 3}
+        shadowOpacity={selected ? 0.2 : 0.1}
         cornerRadius={2}
         onMouseEnter={(e) => {
           (e.target.getStage()?.container() as HTMLElement).style.cursor = 'pointer';
@@ -89,8 +91,9 @@ export const StickyNoteShape: React.FC<ShapeProps> = ({
         y={Math.max(0, object.height - HANDLE_SIZE)}
         width={HANDLE_SIZE}
         height={HANDLE_SIZE}
-        fill="#0f172a"
+        fill={selected ? '#0f172a' : '#64748b'}
         cornerRadius={2}
+        visible={selected}
         draggable
         onMouseDown={(e) => {
           e.cancelBubble = true;

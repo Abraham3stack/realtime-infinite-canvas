@@ -9,6 +9,7 @@ import { AudioShape } from './shapes/AudioShape.js';
 
 interface ObjectRendererProps {
   object: CanvasObject;
+  selected: boolean;
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
@@ -36,6 +37,7 @@ const shapeComponentMap: Record<
  */
 export const ObjectRenderer: React.FC<ObjectRendererProps> = ({
   object,
+  selected,
   onMove,
   onResize,
   onDelete,
@@ -47,5 +49,5 @@ export const ObjectRenderer: React.FC<ObjectRendererProps> = ({
     return null;
   }
 
-  return <Component object={object} onMove={onMove} onResize={onResize} onDelete={onDelete} />;
+  return <Component object={object} selected={selected} onMove={onMove} onResize={onResize} onDelete={onDelete} />;
 };

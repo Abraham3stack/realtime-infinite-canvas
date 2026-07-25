@@ -5,6 +5,7 @@ import { CanvasObject } from '../../store/objects.js';
 
 interface ShapeProps {
   object: CanvasObject;
+  selected: boolean;
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
@@ -14,7 +15,7 @@ const HANDLE_SIZE = 10;
 const MIN_WIDTH = 80;
 const MIN_HEIGHT = 32;
 
-export const TextShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDelete }) => {
+export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
   const textRef = useRef<Konva.Text>(null);
   const groupRef = useRef<Konva.Group>(null);
 
@@ -55,6 +56,11 @@ export const TextShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDe
         fontFamily="Arial, sans-serif"
         width={object.width}
         height={object.height}
+        stroke={selected ? '#0f172a' : undefined}
+        strokeWidth={selected ? 0.4 : 0}
+        shadowColor={selected ? '#0f172a' : undefined}
+        shadowBlur={selected ? 8 : 0}
+        shadowOpacity={selected ? 0.15 : 0}
         onMouseEnter={(e) => {
           (e.target.getStage()?.container() as HTMLElement).style.cursor = 'pointer';
         }}
@@ -67,8 +73,9 @@ export const TextShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDe
         y={Math.max(0, object.height - HANDLE_SIZE)}
         width={HANDLE_SIZE}
         height={HANDLE_SIZE}
-        fill="#0f172a"
+        fill={selected ? '#0f172a' : '#64748b'}
         cornerRadius={2}
+        visible={selected}
         draggable
         onMouseDown={(e) => {
           e.cancelBubble = true;

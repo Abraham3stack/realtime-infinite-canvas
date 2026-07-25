@@ -5,6 +5,7 @@ import { CanvasObject } from '../../store/objects.js';
 
 interface ShapeProps {
   object: CanvasObject;
+  selected: boolean;
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
@@ -14,7 +15,7 @@ const HANDLE_SIZE = 10;
 const MIN_WIDTH = 80;
 const MIN_HEIGHT = 60;
 
-export const ImageShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDelete }) => {
+export const ImageShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
   const groupRef = useRef<Konva.Group>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
 
@@ -54,7 +55,17 @@ export const ImageShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onD
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >
-      <Rect width={object.width} height={object.height} fill="#e2e8f0" stroke="#334155" strokeWidth={1} cornerRadius={4} />
+      <Rect
+        width={object.width}
+        height={object.height}
+        fill="#e2e8f0"
+        stroke={selected ? '#0f172a' : '#334155'}
+        strokeWidth={selected ? 2 : 1}
+        cornerRadius={4}
+        shadowColor={selected ? '#0f172a' : '#000'}
+        shadowBlur={selected ? 12 : 0}
+        shadowOpacity={selected ? 0.15 : 0}
+      />
       {image ? (
         <KonvaImage image={image} width={object.width} height={object.height} cornerRadius={4} />
       ) : (
@@ -75,8 +86,9 @@ export const ImageShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onD
         y={Math.max(0, object.height - HANDLE_SIZE)}
         width={HANDLE_SIZE}
         height={HANDLE_SIZE}
-        fill="#0f172a"
+        fill={selected ? '#0f172a' : '#64748b'}
         cornerRadius={2}
+        visible={selected}
         draggable
         onMouseDown={(e) => {
           e.cancelBubble = true;

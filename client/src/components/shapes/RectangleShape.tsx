@@ -5,6 +5,7 @@ import { CanvasObject } from '../../store/objects.js';
 
 interface ShapeProps {
   object: CanvasObject;
+  selected: boolean;
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
@@ -13,7 +14,7 @@ interface ShapeProps {
 const HANDLE_SIZE = 10;
 const MIN_SIZE = 32;
 
-export const RectangleShape: React.FC<ShapeProps> = ({ object, onMove, onResize, onDelete }) => {
+export const RectangleShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
   const groupRef = useRef<Konva.Group>(null);
 
   const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
@@ -44,8 +45,11 @@ export const RectangleShape: React.FC<ShapeProps> = ({ object, onMove, onResize,
         width={object.width}
         height={object.height}
         fill={object.color}
-        stroke="#333"
-        strokeWidth={2}
+        stroke={selected ? '#0f172a' : '#333'}
+        strokeWidth={selected ? 3 : 2}
+        shadowColor={selected ? '#0f172a' : '#000'}
+        shadowBlur={selected ? 14 : 0}
+        shadowOpacity={selected ? 0.15 : 0}
         onMouseEnter={(e) => {
           e.target.to({ fill: '#2980b9' });
         }}
@@ -59,8 +63,9 @@ export const RectangleShape: React.FC<ShapeProps> = ({ object, onMove, onResize,
         y={Math.max(0, object.height - HANDLE_SIZE)}
         width={HANDLE_SIZE}
         height={HANDLE_SIZE}
-        fill="#0f172a"
+        fill={selected ? '#0f172a' : '#64748b'}
         cornerRadius={2}
+        visible={selected}
         draggable
         onMouseDown={(e) => {
           e.cancelBubble = true;
