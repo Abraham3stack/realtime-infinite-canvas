@@ -79,6 +79,298 @@ function isPhysicsObjectType(type: CanvasObjectType): boolean {
   return PHYSICS_OBJECT_TYPE_SET.has(type);
 }
 
+const SVG_BACKGROUND_GRADIENT_ID = 'canvas-export-background-gradient';
+
+const XML_ESCAPE_LOOKUP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&apos;',
+};
+
+function escapeXml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => XML_ESCAPE_LOOKUP[char] ?? char);
+}
+
+function formatSvgNumber(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  const rounded = Number.parseFloat(value.toFixed(3));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+function wrapTextLines(text: string, width: number, fontSize: number, maxLines = 8): string[] {
+  const normalized = text.trim();
+  if (!normalized) return [''];
+
+  const explicitLines = normalized.split(/\r?\n/);
+  const approxCharsPerLine = Math.max(8, Math.floor(width / Math.max(1, fontSize * 0.62)));
+  const wrapped: string[] = [];
+
+  for (const line of explicitLines) {
+    const words = line.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      wrapped.push('');
+      continue;
+    }
+
+    let currentLine = words[0] ?? '';
+    for (let index = 1; index < words.length; index += 1) {
+      const word = words[index] ?? '';
+      const candidate = `${currentLine} ${word}`.trim();
+      if (candidate.length <= approxCharsPerLine) {
+        currentLine = candidate;
+      } else {
+        wrapped.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) wrapped.push(currentLine);
+    if (wrapped.length >= maxLines) break;
+  }
+
+  return wrapped.slice(0, maxLines);
+}
+
+function renderTextBlock(options: {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  fontFamily: string;
+  fill: string;
+  align?: 'start' | 'middle' | 'end';
+  lineHeight?: number;
+  maxLines?: number;
+}): string {
+  const {
+    text,
+    x,
+    y,
+    width,
+    height,
+    fontSize,
+    fontFamily,
+    fill,
+    align = 'start',
+    lineHeight = 1.2,
+    maxLines = 8,
+  } = options;
+
+  const lines = wrapTextLines(text, width, fontSize, maxLines);
+  const safeWidth = Math.max(0, width);
+  const safeHeight = Math.max(0, height);
+  const textAnchor = align;
+  const anchorX = align === 'middle' ? safeWidth / 2 : align === 'end' ? safeWidth : 0;
+  const startY = y + fontSize;
+
+  const tspans = lines.map((line, index) => {
+    const dy = index === 0 ? 0 : fontSize * lineHeight;
+    return `<tspan x="${formatSvgNumber(anchorX)}" dy="${formatSvgNumber(dy)}">${escapeXml(line)}</tspan>`;
+  }).join('');
+
+  return `<text x="${formatSvgNumber(x)}" y="${formatSvgNumber(startY)}" width="${formatSvgNumber(safeWidth)}" height="${formatSvgNumber(safeHeight)}" font-family="${escapeXml(fontFamily)}" font-size="${formatSvgNumber(fontSize)}" fill="${escapeXml(fill)}" text-anchor="${textAnchor}" dominant-baseline="hanging">${tspans}</text>`;
+}
+
+function renderObjectSvg(object: CanvasObject): string {
+  const rotation = Number.isFinite(object.rotation) ? object.rotation : 0;
+  const translate = `translate(${formatSvgNumber(object.x)} ${formatSvgNumber(object.y)})`;
+  const rotate = rotation !== 0
+    ? ` rotate(${formatSvgNumber(rotation)} ${formatSvgNumber(object.width / 2)} ${formatSvgNumber(object.height / 2)})`
+    : '';
+  const transform = `${translate}${rotate}`;
+  const strokeColor = object.type === 'sticky-note' ? '#ccc' : '#334155';
+
+  switch (object.type) {
+    case 'rectangle':
+      return `
+        <g transform="${transform}">
+          <rect x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" rx="4" ry="4" fill="${escapeXml(object.color)}" stroke="${strokeColor}" stroke-width="2" />
+        </g>
+      `;
+    case 'circle': {
+      const radius = Math.max(0, Math.min(object.width, object.height) / 2);
+      return `
+        <g transform="${transform}">
+          <circle cx="${formatSvgNumber(object.width / 2)}" cy="${formatSvgNumber(object.height / 2)}" r="${formatSvgNumber(radius)}" fill="${escapeXml(object.color)}" stroke="${strokeColor}" stroke-width="2" />
+        </g>
+      `;
+    }
+    case 'text':
+      return `
+        <g transform="${transform}">
+          ${renderTextBlock({
+            text: object.text || 'Text',
+            x: 0,
+            y: 0,
+            width: object.width,
+            height: object.height,
+            fontSize: object.fontSize || 14,
+            fontFamily: 'Arial, sans-serif',
+            fill: object.color,
+            align: 'start',
+            maxLines: 6,
+          })}
+        </g>
+      `;
+    case 'sticky-note':
+      return `
+        <g transform="${transform}">
+          <rect x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" rx="2" ry="2" fill="${escapeXml(object.color)}" stroke="${strokeColor}" stroke-width="1" />
+          ${renderTextBlock({
+            text: object.text || 'Note',
+            x: 4,
+            y: 4,
+            width: Math.max(0, object.width - 8),
+            height: Math.max(0, object.height - 8),
+            fontSize: object.fontSize || 12,
+            fontFamily: 'Arial, sans-serif',
+            fill: '#2c3e50',
+            align: 'start',
+            maxLines: 10,
+          })}
+        </g>
+      `;
+    case 'image': {
+      const imageFallback = `
+        <rect x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" rx="4" ry="4" fill="#e2e8f0" stroke="#334155" stroke-width="1" />
+        ${renderTextBlock({
+          text: 'Image Placeholder',
+          x: 8,
+          y: 8,
+          width: Math.max(0, object.width - 16),
+          height: Math.max(0, object.height - 16),
+          fontSize: 14,
+          fontFamily: 'Arial, sans-serif',
+          fill: '#334155',
+          align: 'middle',
+          maxLines: 2,
+        })}
+      `;
+
+      if (!object.mediaUrl) {
+        return `<g transform="${transform}">${imageFallback}</g>`;
+      }
+
+      return `
+        <g transform="${transform}">
+          <rect x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" rx="4" ry="4" fill="#e2e8f0" stroke="#334155" stroke-width="1" />
+          <clipPath id="clip-${escapeXml(object.id)}"><rect x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" rx="4" ry="4" /></clipPath>
+          <image href="${escapeXml(object.mediaUrl)}" x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" preserveAspectRatio="none" clip-path="url(#clip-${escapeXml(object.id)})" />
+        </g>
+      `;
+    }
+    case 'audio': {
+      const durationLabel = object.durationMs && object.durationMs > 0
+        ? `${Math.round(object.durationMs / 100) / 10}s`
+        : '0.0s';
+
+      return `
+        <g transform="${transform}">
+          <rect x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" rx="8" ry="8" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1" />
+          <circle cx="22" cy="22" r="14" fill="#1d4ed8" />
+          <text x="22" y="27" font-family="Arial, sans-serif" font-size="14" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${escapeXml('>')}</text>
+          ${renderTextBlock({
+            text: object.text || 'Audio Placeholder',
+            x: 46,
+            y: 12,
+            width: Math.max(0, object.width - 54),
+            height: 24,
+            fontSize: 14,
+            fontFamily: 'Arial, sans-serif',
+            fill: '#1e293b',
+            align: 'start',
+            maxLines: 2,
+          })}
+          ${renderTextBlock({
+            text: durationLabel,
+            x: 46,
+            y: 32,
+            width: Math.max(0, object.width - 54),
+            height: 20,
+            fontSize: 12,
+            fontFamily: 'Arial, sans-serif',
+            fill: '#475569',
+            align: 'start',
+            maxLines: 1,
+          })}
+        </g>
+      `;
+    }
+    case 'video': {
+      const durationLabel = object.durationMs && object.durationMs > 0
+        ? `${Math.round(object.durationMs / 100) / 10}s`
+        : '--';
+
+      return `
+        <g transform="${transform}">
+          <rect x="0" y="0" width="${formatSvgNumber(object.width)}" height="${formatSvgNumber(object.height)}" rx="6" ry="6" fill="#dbeafe" stroke="#1e3a8a" stroke-width="1" />
+          <rect x="10" y="10" width="${formatSvgNumber(Math.max(0, object.width - 20))}" height="${formatSvgNumber(Math.max(0, object.height - 20))}" rx="4" ry="4" fill="#1e293b" />
+          <rect x="12" y="12" width="34" height="24" rx="4" ry="4" fill="rgba(15, 23, 42, 0.75)" />
+          <text x="29" y="28" font-family="Arial, sans-serif" font-size="12" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${escapeXml('>')}</text>
+          ${renderTextBlock({
+            text: object.text || 'Video',
+            x: 52,
+            y: 15,
+            width: Math.max(0, object.width - 64),
+            height: 20,
+            fontSize: 13,
+            fontFamily: 'Arial, sans-serif',
+            fill: '#0f172a',
+            align: 'start',
+            maxLines: 2,
+          })}
+          ${renderTextBlock({
+            text: `${durationLabel} • ${object.mediaFormat || 'video'}`,
+            x: 52,
+            y: 32,
+            width: Math.max(0, object.width - 64),
+            height: 20,
+            fontSize: 11,
+            fontFamily: 'Arial, sans-serif',
+            fill: '#334155',
+            align: 'start',
+            maxLines: 1,
+          })}
+        </g>
+      `;
+    }
+    default:
+      return '';
+  }
+}
+
+function buildSvgExportMarkup(options: {
+  objects: CanvasObject[];
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+}): string {
+  const { objects, width, height, offsetX, offsetY, scale } = options;
+  const sortedObjects = [...objects].sort((left, right) => left.zIndex - right.zIndex);
+  const viewportTransform = `translate(${formatSvgNumber(offsetX)} ${formatSvgNumber(offsetY)}) scale(${formatSvgNumber(scale)})`;
+  const renderedObjects = sortedObjects.map((object) => renderObjectSvg(object)).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${formatSvgNumber(width)}" height="${formatSvgNumber(height)}" viewBox="0 0 ${formatSvgNumber(width)} ${formatSvgNumber(height)}" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="${SVG_BACKGROUND_GRADIENT_ID}" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#eef2ff" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="${formatSvgNumber(width)}" height="${formatSvgNumber(height)}" fill="url(#${SVG_BACKGROUND_GRADIENT_ID})" />
+  <g transform="${viewportTransform}">
+${renderedObjects}
+  </g>
+</svg>`;
+}
+
 function buildMatterBodyFromObject(
   object: CanvasObject,
   physics: RoomPhysicsState,
@@ -562,6 +854,20 @@ export const Canvas: React.FC<CanvasProps> = ({
     document.body.removeChild(anchor);
     onNotify?.('✓ PNG exported');
   }, [onNotify]);
+
+  const handleExportSvg = useCallback(() => {
+    const svgMarkup = buildSvgExportMarkup({
+      objects,
+      width: stageSize.width,
+      height: stageSize.height,
+      offsetX,
+      offsetY,
+      scale,
+    });
+    const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+    downloadBlob(blob, `canvas-${new Date().toISOString().replace(/[:.]/g, '-')}.svg`);
+    onNotify?.('✓ SVG exported');
+  }, [downloadBlob, objects, offsetX, offsetY, onNotify, scale, stageSize.height, stageSize.width]);
 
   const handleExportJson = useCallback(() => {
     const payload = {
@@ -1591,6 +1897,15 @@ export const Canvas: React.FC<CanvasProps> = ({
             aria-label="Export PNG"
           >
             <span aria-hidden="true">PNG</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={handleExportSvg}
+            title="Export SVG"
+            aria-label="Export SVG"
+          >
+            <span aria-hidden="true">SVG</span>
           </button>
           <button
             type="button"

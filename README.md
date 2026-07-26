@@ -194,12 +194,15 @@ Upload guards:
 Canvas toolbar includes:
 
 - PNG export from current canvas stage
+- SVG export from current canvas stage
 - JSON export containing:
   - shape/text/media objects
   - position, size, z-index, rotation
   - ownership (`createdBySessionId`)
   - timestamps (`createdAt`, `updatedAt`, `mediaCreatedAt`)
   - media metadata (`publicId`, `secureUrl`, `resourceType`, `format`, `bytes`, dimensions, duration, MIME type)
+
+SVG export uses Konva's native stage serialization, so supported shapes and text stay vector-based and scale cleanly. Image and media nodes are included when the rendering library can serialize their sources.
 
 ## Physics System (Phase 5)
 
