@@ -2,6 +2,7 @@ import React from 'react';
 import { CanvasObject, CanvasObjectType } from '../store/objects.js';
 import { RectangleShape } from './shapes/RectangleShape.js';
 import { CircleShape } from './shapes/CircleShape.js';
+import { TriangleShape } from './shapes/TriangleShape.js';
 import { TextShape } from './shapes/TextShape.js';
 import { StickyNoteShape } from './shapes/StickyNoteShape.js';
 import { ImageShape } from './shapes/ImageShape.js';
@@ -14,6 +15,7 @@ interface ObjectRendererProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onEditText?: (objectId: string) => void;
   onDragStart?: () => void;
   onDragMove?: (x: number, y: number) => void;
   draggable?: boolean;
@@ -28,6 +30,7 @@ const shapeComponentMap: Record<
 > = {
   rectangle: RectangleShape,
   circle: CircleShape,
+  triangle: TriangleShape,
   text: TextShape,
   'sticky-note': StickyNoteShape,
   image: ImageShape,
@@ -46,6 +49,7 @@ const ObjectRendererImpl: React.FC<ObjectRendererProps> = ({
   onMove,
   onResize,
   onDelete,
+  onEditText,
   onDragStart,
   onDragMove,
   draggable,
@@ -64,6 +68,7 @@ const ObjectRendererImpl: React.FC<ObjectRendererProps> = ({
       onMove={onMove}
       onResize={onResize}
       onDelete={onDelete}
+      onEditText={onEditText}
       onDragStart={onDragStart}
       onDragMove={onDragMove}
       draggable={draggable}

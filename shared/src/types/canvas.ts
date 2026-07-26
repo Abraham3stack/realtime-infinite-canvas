@@ -1,6 +1,6 @@
 // Canvas object types (current realtime runtime contract)
 
-export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
+export type CanvasObjectType = 'rectangle' | 'circle' | 'triangle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
 
 export interface CanvasObject {
   id: string;

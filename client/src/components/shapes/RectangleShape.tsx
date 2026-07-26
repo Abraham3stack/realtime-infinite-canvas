@@ -9,6 +9,7 @@ interface ShapeProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onEditText?: (objectId: string) => void;
   onDragStart?: () => void;
   onDragMove?: (x: number, y: number) => void;
   draggable?: boolean;

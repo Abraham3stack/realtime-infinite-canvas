@@ -326,7 +326,9 @@ Known limitations:
 - Guest session creation and token-based Socket.IO authentication
 - Room create/join/leave flows with share-code collaboration
 - Realtime canvas object CRUD synchronization across connected participants
-- Mandatory object types: rectangle, circle, text, sticky note, image, audio, video
+- Mandatory object types: rectangle, circle, triangle, text, sticky note, image, audio, video
+- Shape creation menu with Rectangle, Square preset, Circle, and Triangle
+- Inline text editing workflow (place text on click, type live, re-open via text double-click or Edit Text action)
 - Cloudinary-backed media upload + metadata persistence
 - PNG export and JSON export
 - Matter.js host-authoritative physics simulation for supported object types
@@ -338,14 +340,22 @@ Known limitations:
 
 ## Keyboard Shortcuts
 
-- `R`: Create rectangle
-- `C`: Create circle
-- `T`: Create text object
+- `R`: Arm rectangle creation tool (click canvas to place)
+- `C`: Arm circle creation tool (click canvas to place)
+- `T`: Arm text creation tool (click canvas to place, then type inline)
 - `S`: Create sticky note
 - `Arrow Keys` (while mini-map is focused): Nudge viewport from mini-map keyboard navigation
 - `Enter` in Create/Join form fields: Submit current action
 
 Shortcuts are ignored while typing in input or textarea fields.
+
+## Text Editing Workflow
+
+- Select `Text` from the toolbar and click the canvas to place a text object.
+- An inline editor opens immediately at the placed location.
+- Text updates stream in real time using the existing object update synchronization path.
+- Finish editing with `Enter`, by clicking outside the editor, or by switching tools.
+- Re-open editing for existing text via text-object double-click or the `Edit Text` action when a text object is selected.
 
 ## Architecture Overview
 

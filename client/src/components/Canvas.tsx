@@ -79,12 +79,15 @@ interface DragMomentumState {
 }
 
 type OperationResult = 'ack' | 'timeout';
+type ShapeMenuOption = 'rectangle' | 'square' | 'circle' | 'triangle';
+type CreationTool = Extract<CanvasObjectType, 'rectangle' | 'circle' | 'triangle' | 'text'>;
 
 const PHYSICS_OBJECT_TYPES: CanvasObjectType[] = ['rectangle', 'circle', 'text'];
 const PHYSICS_OBJECT_TYPE_SET = new Set<CanvasObjectType>(PHYSICS_OBJECT_TYPES);
 const DEFAULT_COLOR_BY_TYPE: Record<CanvasObjectType, string> = {
   rectangle: '#3498db',
   circle: '#e74c3c',
+  triangle: '#8b5cf6',
   text: '#2c3e50',
   'sticky-note': '#f1c40f',
   image: '#cbd5e1',
@@ -282,6 +285,12 @@ function renderObjectSvg(object: CanvasObject): string {
         </g>
       `;
     }
+    case 'triangle':
+      return `
+        <g transform="${transform}">
+          <polygon points="${formatSvgNumber(object.width / 2)},0 ${formatSvgNumber(object.width)},${formatSvgNumber(object.height)} 0,${formatSvgNumber(object.height)}" fill="${escapeXml(object.color)}" stroke="${strokeColor}" stroke-width="2" />
+        </g>
+      `;
     case 'text':
       return `
         <g transform="${transform}">
@@ -495,9 +504,14 @@ interface CanvasProps {
  * Toolbar order is intentionally stable so power users can build muscle memory
  * around icon positions in addition to keyboard shortcuts.
  */
-const TOOLBAR_ITEMS: Array<{ type: CanvasObjectType; label: string; hotkey: string; icon: string }> = [
-  { type: 'rectangle', label: 'Rectangle', hotkey: 'R', icon: '[]' },
-  { type: 'circle', label: 'Circle', hotkey: 'C', icon: '()' },
+const SHAPE_MENU_ITEMS: Array<{ option: ShapeMenuOption; createAs: Exclude<CreationTool, 'text'>; label: string; icon: string; isSquare?: boolean }> = [
+  { option: 'rectangle', createAs: 'rectangle', label: 'Rectangle', icon: '▭' },
+  { option: 'square', createAs: 'rectangle', label: 'Square', icon: '□', isSquare: true },
+  { option: 'circle', createAs: 'circle', label: 'Circle', icon: '◯' },
+  { option: 'triangle', createAs: 'triangle', label: 'Triangle', icon: '△' },
+];
+
+const TOOLBAR_ITEMS: Array<{ type: Extract<CanvasObjectType, 'text' | 'sticky-note'>; label: string; hotkey: string; icon: string }> = [
   { type: 'text', label: 'Text', hotkey: 'T', icon: 'T' },
   { type: 'sticky-note', label: 'Sticky Note', hotkey: 'S', icon: 'SN' },
 ];
@@ -528,8 +542,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   const audioUploadInputRef = useRef<HTMLInputElement>(null);
   const videoUploadInputRef = useRef<HTMLInputElement>(null);
   const [stageSize, setStageSize] = useState({ width: 1024, height: 768 });
-  const [activeTool, setActiveTool] = useState<CanvasObjectType | null>(null);
+  const [activeTool, setActiveTool] = useState<CreationTool | null>(null);
+  const [selectedShapeOption, setSelectedShapeOption] = useState<ShapeMenuOption>('rectangle');
+  const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [editingTextObjectId, setEditingTextObjectId] = useState<string | null>(null);
+  const [editingTextValue, setEditingTextValue] = useState('');
   const [uploadInProgress, setUploadInProgress] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
@@ -547,6 +565,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [replaySpeed, setReplaySpeed] = useState(1);
   const [fieldMode, setFieldMode] = useState<FieldMode>(null);
   const [isPhysicsControlsExpanded, setIsPhysicsControlsExpanded] = useState(false);
+  const shapeMenuRef = useRef<HTMLDivElement>(null);
+  const textEditorRef = useRef<HTMLTextAreaElement>(null);
   
   // Viewport state: pan and zoom transforms
   const { offsetX, offsetY, scale, panBy, zoomBy, setPan } = useViewportStore((s) => ({
@@ -605,6 +625,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const isReplayingQueueRef = useRef(false);
   const queueReplayTimerRef = useRef<number | null>(null);
   const offlineQueue = useMemo(() => getOfflineOperationsQueue(), []);
+
+
 
   const canSendRealtimeOperation = Boolean(room && socketConnected && browserOnline);
   const replayCurrentPosition = replayState.appliedEventCount;
@@ -751,6 +773,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     setFieldMode(null);
     fieldActionRef.current = null;
     setIsPhysicsControlsExpanded(false);
+    setActiveTool(null);
+    setIsShapeMenuOpen(false);
+    setEditingTextObjectId(null);
+    setEditingTextValue('');
   }, [room?.id]);
 
   useEffect(() => {
@@ -758,6 +784,13 @@ export const Canvas: React.FC<CanvasProps> = ({
       setIsPhysicsControlsExpanded(false);
     }
   }, [roomPhysics.enabled, roomPhysics.simulationRunning]);
+
+  useEffect(() => {
+    if (!isReplayMode) return;
+    setEditingTextObjectId(null);
+    setActiveTool(null);
+    setIsShapeMenuOpen(false);
+  }, [isReplayMode]);
 
   const pinnedSet = useMemo(() => new Set(roomPhysics.staticObjectIds), [roomPhysics.staticObjectIds]);
   const physicsStructureSignature = useMemo(() => {
@@ -963,21 +996,89 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   }, [generateOperationId, isReplayMode, room]);
 
+  const finishTextEditing = useCallback(() => {
+    setEditingTextObjectId(null);
+  }, []);
+
+  const startTextEditing = useCallback((objectId: string) => {
+    if (isReplayMode) return;
+    const target = useCanvasObjectsStore.getState().getObject(objectId);
+    if (!target || target.type !== 'text') return;
+
+    setSelectedObjectId(objectId);
+    setEditingTextObjectId(objectId);
+    setEditingTextValue(target.text ?? '');
+  }, [isReplayMode]);
+
+  const createObjectAtAndSync = useCallback((
+    type: CanvasObjectType,
+    worldX: number,
+    worldY: number,
+    options?: { forceSquare?: boolean; beginTextEdit?: boolean }
+  ) => {
+    if (!room || isReplayMode) return null;
+
+    const id = addObject(type, worldX, worldY);
+
+    const object = useCanvasObjectsStore.getState().getObject(id);
+    if (!object) {
+      return null;
+    }
+
+    if (options?.forceSquare && type === 'rectangle') {
+      const squareSize = Math.max(32, Math.min(object.width, object.height));
+      updateObject(id, { width: squareSize, height: squareSize });
+    }
+
+    const syncedObject = useCanvasObjectsStore.getState().getObject(id);
+    if (!syncedObject) {
+      return null;
+    }
+
+    setSelectedObjectId(id);
+    emitCreate(syncedObject);
+
+    if (options?.forceSquare && type === 'rectangle') {
+      emitUpdate(id, { width: syncedObject.width, height: syncedObject.height });
+    }
+
+    if (options?.beginTextEdit && type === 'text') {
+      setEditingTextObjectId(id);
+      setEditingTextValue(syncedObject.text ?? '');
+    }
+
+    return id;
+  }, [addObject, emitCreate, emitUpdate, isReplayMode, room, updateObject]);
+
   const createObjectAndSync = useCallback((type: CanvasObjectType) => {
     if (!room || isReplayMode) return;
 
-    // Objects are created at viewport center in world-space so creation remains
-    // predictable regardless of current pan/zoom.
+    // Keyboard and legacy quick-create still drop at viewport center.
     const center = canvasCenterToWorld(stageSize, { offsetX, offsetY, scale });
+    createObjectAtAndSync(type, center.x, center.y, {
+      beginTextEdit: type === 'text',
+    });
+  }, [createObjectAtAndSync, isReplayMode, offsetX, offsetY, room, scale, stageSize]);
 
-    const id = addObject(type, center.x, center.y);
-    const object = useCanvasObjectsStore.getState().getObject(id);
-    if (!object) return;
+  const selectedShapeConfig = useMemo(() => {
+    return SHAPE_MENU_ITEMS.find((item) => item.option === selectedShapeOption) ?? SHAPE_MENU_ITEMS[0];
+  }, [selectedShapeOption]);
 
-    setActiveTool(type);
-    setSelectedObjectId(id);
-    emitCreate(object);
-  }, [addObject, emitCreate, isReplayMode, offsetX, offsetY, room, scale, stageSize]);
+  const handleShapeToolSelect = useCallback((option: ShapeMenuOption) => {
+    const config = SHAPE_MENU_ITEMS.find((item) => item.option === option);
+    if (!config) return;
+
+    finishTextEditing();
+    setSelectedShapeOption(option);
+    setActiveTool(config.createAs);
+    setIsShapeMenuOpen(false);
+  }, [finishTextEditing]);
+
+  const handleTextToolSelect = useCallback(() => {
+    finishTextEditing();
+    setActiveTool('text');
+    setIsShapeMenuOpen(false);
+  }, [finishTextEditing]);
 
   const createMediaObjectsAndSync = useCallback((uploads: UploadedMedia[]) => {
     if (!room || isReplayMode) return;
@@ -1201,9 +1302,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (selectedObjectId === objectId) {
       setSelectedObjectId(null);
     }
+    if (editingTextObjectId === objectId) {
+      setEditingTextObjectId(null);
+      setEditingTextValue('');
+    }
     emitDelete(objectId);
     onObjectDeleted?.();
-  }, [deleteObject, emitDelete, isReplayMode, onObjectDeleted, selectedObjectId]);
+  }, [deleteObject, editingTextObjectId, emitDelete, isReplayMode, onObjectDeleted, selectedObjectId]);
 
   const moveObjectAndSync = useCallback((objectId: string, x: number, y: number) => {
     if (isReplayMode) return;
@@ -1638,10 +1743,30 @@ export const Canvas: React.FC<CanvasProps> = ({
   ]);
 
   useEffect(() => {
-    if (!activeTool) return;
-    const timer = window.setTimeout(() => setActiveTool(null), 350);
-    return () => window.clearTimeout(timer);
-  }, [activeTool]);
+    if (!isShapeMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (shapeMenuRef.current?.contains(target)) return;
+      setIsShapeMenuOpen(false);
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [isShapeMenuOpen]);
+
+  useEffect(() => {
+    if (!editingTextObjectId) return;
+    const nextFrame = window.requestAnimationFrame(() => {
+      textEditorRef.current?.focus();
+      textEditorRef.current?.select();
+    });
+    return () => {
+      window.cancelAnimationFrame(nextFrame);
+    };
+  }, [editingTextObjectId]);
 
   // Track mouse state for panning
   const isPanning = useRef(false);
@@ -1675,25 +1800,31 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
 
-      // Use keyboard shortcuts: R=Rectangle, C=Circle, T=Text, S=Sticky Note.
+      // Use keyboard shortcuts: R=Rectangle tool, C=Circle tool, T=Text tool, S=Sticky Note.
       switch (e.key.toLowerCase()) {
         case 'r': {
           e.preventDefault();
-          createObjectAndSync('rectangle');
+          finishTextEditing();
+          setSelectedShapeOption('rectangle');
+          setActiveTool('rectangle');
           break;
         }
         case 'c': {
           e.preventDefault();
-          createObjectAndSync('circle');
+          finishTextEditing();
+          setSelectedShapeOption('circle');
+          setActiveTool('circle');
           break;
         }
         case 't': {
           e.preventDefault();
-          createObjectAndSync('text');
+          finishTextEditing();
+          setActiveTool('text');
           break;
         }
         case 's': {
           e.preventDefault();
+          finishTextEditing();
           createObjectAndSync('sticky-note');
           break;
         }
@@ -1702,7 +1833,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createObjectAndSync, isReplayMode, room]);
+  }, [createObjectAndSync, finishTextEditing, isReplayMode, room]);
 
   // Subscriptions are attached only while in-room so handlers cannot leak across
   // room transitions.
@@ -1774,6 +1905,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       deleteObject(objectId);
       setSelectedObjectId((current) => (current === objectId ? null : current));
+      setEditingTextObjectId((current) => (current === objectId ? null : current));
     };
 
     socket.on('object:created', handleObjectCreated);
@@ -1987,28 +2119,51 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Mouse down: start panning (but not if clicking on an object)
   const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
-    // Only pan on left mouse button (button 0) and only on Stage (not on objects)
+    // Only pan/place on left mouse button (button 0).
     if (e.evt.button !== 0) return;
-    
-    const clickedStage = e.target === e.target.getStage();
 
-    if (clickedStage) {
+    const parentGroup = e.target.findAncestor('Group');
+    const clickedEmptyCanvas = !parentGroup;
+    if (clickedEmptyCanvas) {
+      if (activeTool) {
+        const stage = e.target.getStage();
+        const pointer = stage?.getPointerPosition();
+
+        if (pointer) {
+          const worldX = (pointer.x - offsetX) / scale;
+          const worldY = (pointer.y - offsetY) / scale;
+          const forceSquare = selectedShapeOption === 'square' && activeTool === 'rectangle';
+          const beginTextEdit = activeTool === 'text';
+
+          createObjectAtAndSync(activeTool, worldX, worldY, {
+            forceSquare,
+            beginTextEdit,
+          });
+
+          setActiveTool(null);
+          setSelectedShapeOption((current) => (current === 'square' ? 'rectangle' : current));
+        }
+      }
+
       if (isFieldActionEnabled) {
         updateFieldActionPointer(e);
       }
 
+      finishTextEditing();
       setSelectedObjectId(null);
       isPanning.current = true;
       lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY };
       return;
     }
 
-    const parentGroup = e.target.findAncestor('Group');
     const objectId = parentGroup?.id();
     if (objectId) {
+      finishTextEditing();
       setSelectedObjectId(objectId);
     }
-  }, [isFieldActionEnabled, updateFieldActionPointer]);
+  }, [activeTool, createObjectAtAndSync, finishTextEditing, isFieldActionEnabled, offsetX, offsetY, scale, selectedShapeOption, updateFieldActionPointer]);
+
+
 
   // Mouse move: pan if dragging.
   // Input events can arrive much faster than paint frames; batching pan deltas in
@@ -2120,6 +2275,58 @@ export const Canvas: React.FC<CanvasProps> = ({
     return displayedObjects.find((object) => object.id === selectedObjectId) ?? null;
   }, [displayedObjects, selectedObjectId]);
 
+  const editingTextObject = useMemo(() => {
+    if (!editingTextObjectId) return null;
+    const target = displayedObjects.find((object) => object.id === editingTextObjectId) ?? null;
+    if (!target || target.type !== 'text') return null;
+    return target;
+  }, [displayedObjects, editingTextObjectId]);
+
+  const textEditorStyle = useMemo<React.CSSProperties | null>(() => {
+    if (!editingTextObject) return null;
+
+    return {
+      left: `${offsetX + editingTextObject.x * scale}px`,
+      top: `${offsetY + editingTextObject.y * scale}px`,
+      width: `${Math.max(120, editingTextObject.width * scale)}px`,
+      minHeight: `${Math.max(40, editingTextObject.height * scale)}px`,
+      fontSize: `${Math.max(12, (editingTextObject.fontSize ?? 14) * scale)}px`,
+      color: editingTextObject.color,
+      transform: `rotate(${editingTextObject.rotation}rad)`,
+      transformOrigin: 'top left',
+    };
+  }, [editingTextObject, offsetX, offsetY, scale]);
+
+  const handleTextEditorChange = useCallback((value: string) => {
+    if (!editingTextObjectId || isReplayMode) return;
+    setEditingTextValue(value);
+    updateObject(editingTextObjectId, { text: value });
+    emitUpdate(editingTextObjectId, { text: value });
+  }, [editingTextObjectId, emitUpdate, isReplayMode, updateObject]);
+
+  const finishAndPersistTextEdit = useCallback(() => {
+    if (!editingTextObjectId || isReplayMode) {
+      finishTextEditing();
+      return;
+    }
+
+    const latest = useCanvasObjectsStore.getState().getObject(editingTextObjectId);
+    const nextText = editingTextValue.trim().length > 0 ? editingTextValue : 'Text';
+
+    if (!latest || latest.type !== 'text') {
+      finishTextEditing();
+      return;
+    }
+
+    if (latest.text !== nextText) {
+      updateObject(editingTextObjectId, { text: nextText });
+      emitUpdate(editingTextObjectId, { text: nextText });
+    }
+
+    setEditingTextValue(nextText);
+    finishTextEditing();
+  }, [editingTextObjectId, editingTextValue, emitUpdate, finishTextEditing, isReplayMode, updateObject]);
+
   const selectedObjectSupportsPhysics = Boolean(selectedObject && isPhysicsObjectType(selectedObject.type));
   const selectedObjectIsPinned = Boolean(selectedObject && pinnedSet.has(selectedObject.id));
 
@@ -2183,15 +2390,61 @@ export const Canvas: React.FC<CanvasProps> = ({
               <span className="toolbar-group-hint">Create and export</span>
             </div>
             <div className="tool-actions" aria-label="Shape tools">
+              <div className="shape-menu" ref={shapeMenuRef}>
+                <button
+                  type="button"
+                  className={activeTool === 'rectangle' || activeTool === 'circle' || activeTool === 'triangle' ? 'tool-btn active shape-menu-trigger' : 'tool-btn shape-menu-trigger'}
+                  onClick={() => {
+                    finishTextEditing();
+                    setIsShapeMenuOpen((current) => !current);
+                  }}
+                  disabled={isReplayMode}
+                  title={`Shape (${selectedShapeConfig?.label ?? 'Rectangle'})`}
+                  aria-label={`Shape menu (${selectedShapeConfig?.label ?? 'Rectangle'})`}
+                  aria-expanded={isShapeMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  <span aria-hidden="true">{selectedShapeConfig?.icon ?? '▭'}</span>
+                  <span>Shape</span>
+                  <span aria-hidden="true">▾</span>
+                </button>
+                {isShapeMenuOpen ? (
+                  <div className="shape-menu-panel" role="menu" aria-label="Shape options">
+                    {SHAPE_MENU_ITEMS.map((shape) => (
+                      <button
+                        key={shape.option}
+                        type="button"
+                        role="menuitem"
+                        className={selectedShapeOption === shape.option ? 'shape-menu-item shape-menu-item--active' : 'shape-menu-item'}
+                        onClick={() => handleShapeToolSelect(shape.option)}
+                        aria-label={`Select ${shape.label} tool`}
+                      >
+                        <span aria-hidden="true">{shape.icon}</span>
+                        <span>{shape.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
               {TOOLBAR_ITEMS.map((tool) => (
                 <button
                   key={tool.type}
                   type="button"
                   className={activeTool === tool.type ? 'tool-btn active' : 'tool-btn'}
-                  onClick={() => createObjectAndSync(tool.type)}
+                  onClick={() => {
+                    if (tool.type === 'text') {
+                      handleTextToolSelect();
+                      return;
+                    }
+
+                    finishTextEditing();
+                    createObjectAndSync(tool.type);
+                    setActiveTool(null);
+                  }}
                   disabled={isReplayMode}
-                  title={`${tool.label} (${tool.hotkey})`}
-                  aria-label={`${tool.label} (${tool.hotkey})`}
+                  title={tool.type === 'text' ? `${tool.label} (${tool.hotkey}) - click canvas to place` : `${tool.label} (${tool.hotkey})`}
+                  aria-label={tool.type === 'text' ? `${tool.label} tool (${tool.hotkey})` : `${tool.label} (${tool.hotkey})`}
                 >
                   <span aria-hidden="true">{tool.icon}</span>
                 </button>
@@ -2475,11 +2728,25 @@ export const Canvas: React.FC<CanvasProps> = ({
                 Retry Upload
               </button>
             ) : null}
+            {selectedObject?.type === 'text' && !isReplayMode ? (
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => startTextEditing(selectedObject.id)}
+                aria-label="Edit selected text"
+                title="Edit selected text"
+              >
+                Edit Text
+              </button>
+            ) : null}
             {selectedObjectId && !isReplayMode && (
               <button
                 type="button"
                 className="delete-btn"
-                onClick={() => deleteObjectAndSync(selectedObjectId)}
+                onClick={() => {
+                  finishTextEditing();
+                  deleteObjectAndSync(selectedObjectId);
+                }}
                 aria-label="Delete selected object"
                 title="Delete selected object"
               >
@@ -2632,16 +2899,47 @@ export const Canvas: React.FC<CanvasProps> = ({
               }}
               onDelete={() => {
                 if (isReplayMode) return;
+                finishTextEditing();
                 deleteObjectAndSync(obj.id);
               }}
               onResize={(width, height) => {
                 if (isReplayMode) return;
                 resizeObjectAndSync(obj.id, width, height);
               }}
+              onEditText={(objectId) => {
+                if (isReplayMode) return;
+                startTextEditing(objectId);
+              }}
             />
           ))}
         </Layer>
       </Stage>
+
+      {editingTextObject && textEditorStyle ? (
+        <textarea
+          ref={textEditorRef}
+          className="canvas-inline-text-editor"
+          value={editingTextValue}
+          onChange={(event) => {
+            handleTextEditorChange(event.target.value);
+          }}
+          onBlur={() => {
+            finishAndPersistTextEdit();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              finishAndPersistTextEdit();
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              finishAndPersistTextEdit();
+            }
+          }}
+          style={textEditorStyle}
+          aria-label="Inline text editor"
+        />
+      ) : null}
 
       <MiniMapRadar
         objects={displayedObjects}

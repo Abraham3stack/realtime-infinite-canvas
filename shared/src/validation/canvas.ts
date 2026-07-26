@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 
-export const ObjectTypeSchema = z.enum(['rectangle', 'circle', 'text', 'sticky-note', 'image', 'audio', 'video']);
+export const ObjectTypeSchema = z.enum(['rectangle', 'circle', 'triangle', 'text', 'sticky-note', 'image', 'audio', 'video']);
 
 const MediaMetadataSchema = z.object({
   mediaUrl: z.string().url().optional(),
@@ -48,6 +48,11 @@ export const CircleObjectSchema = BaseCanvasObjectSchema.extend({
   color: z.string().optional(),
 });
 
+export const TriangleObjectSchema = BaseCanvasObjectSchema.extend({
+  type: z.literal('triangle'),
+  color: z.string().optional(),
+});
+
 export const StickyObjectSchema = BaseCanvasObjectSchema.extend({
   type: z.literal('sticky-note'),
   text: z.string().optional(),
@@ -73,6 +78,7 @@ export const CanvasObjectSchema = z.discriminatedUnion('type', [
   TextObjectSchema,
   RectangleObjectSchema,
   CircleObjectSchema,
+  TriangleObjectSchema,
   StickyObjectSchema,
   ImageObjectSchema,
   AudioObjectSchema,
@@ -112,6 +118,7 @@ export type ObjectType = z.infer<typeof ObjectTypeSchema>;
 export type TextObject = z.infer<typeof TextObjectSchema>;
 export type RectangleObject = z.infer<typeof RectangleObjectSchema>;
 export type CircleObject = z.infer<typeof CircleObjectSchema>;
+export type TriangleObject = z.infer<typeof TriangleObjectSchema>;
 export type StickyObject = z.infer<typeof StickyObjectSchema>;
 export type ImageObject = z.infer<typeof ImageObjectSchema>;
 export type AudioObject = z.infer<typeof AudioObjectSchema>;

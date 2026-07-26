@@ -19,6 +19,7 @@ export {
   TextObjectSchema,
   RectangleObjectSchema,
   CircleObjectSchema,
+  TriangleObjectSchema,
   StickyObjectSchema,
   ImageObjectSchema,
   AudioObjectSchema,

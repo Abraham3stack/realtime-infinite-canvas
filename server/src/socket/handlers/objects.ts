@@ -25,11 +25,12 @@ interface ObjectDeletePayload {
   objectId: string;
 }
 
-type ClientCanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
+type ClientCanvasObjectType = 'rectangle' | 'circle' | 'triangle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
 
 const CLIENT_OBJECT_TYPES = new Set<ClientCanvasObjectType>([
   'rectangle',
   'circle',
+  'triangle',
   'text',
   'sticky-note',
   'image',
@@ -253,6 +254,13 @@ function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
           color: row.fillColor ?? '#e74c3c',
         };
       }
+      if (row.shapeType === 'triangle') {
+        return {
+          ...base,
+          type: 'triangle',
+          color: row.fillColor ?? '#8b5cf6',
+        };
+      }
       return {
         ...base,
         type: 'rectangle',
@@ -385,6 +393,13 @@ function toCreateData(roomId: string, sessionId: string, object: ClientCanvasObj
         type: 'shape',
         shapeType: 'circle',
         fillColor: object.color ?? '#e74c3c',
+      };
+    case 'triangle':
+      return {
+        ...common,
+        type: 'shape',
+        shapeType: 'triangle',
+        fillColor: object.color ?? '#8b5cf6',
       };
     case 'text':
       return {

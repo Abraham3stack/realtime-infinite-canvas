@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 // Canvas object type definitions
-export type CanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
+export type CanvasObjectType = 'rectangle' | 'circle' | 'triangle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
 
 export interface CanvasObject {
   id: string;
@@ -90,6 +90,8 @@ function sanitizeCanvasObject(raw: CanvasObject): CanvasObject {
   const fallbackColor =
     raw.type === 'circle'
       ? '#e74c3c'
+      : raw.type === 'triangle'
+        ? '#8b5cf6'
       : raw.type === 'text'
         ? '#2c3e50'
         : raw.type === 'sticky-note'
@@ -163,6 +165,11 @@ const getDefaultProperties = (type: CanvasObjectType) => {
       height: baseSize,
       color: '#e74c3c',
     },
+    triangle: {
+      width: baseSize,
+      height: baseSize,
+      color: '#8b5cf6',
+    },
     text: {
       width: baseSize * 1.5,
       height: 40,
@@ -206,6 +213,7 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
   nextZIndex: 1,
 
   addObject: (type, x, y) => {
+
     const id = generateId();
     const defaults = getDefaultProperties(type);
     const state = get();

@@ -667,6 +667,7 @@ input:focus-visible {
   padding: 0 0.1rem;
 }
 
+
 .toolbar-group-title {
   font-size: 0.72rem;
   font-weight: 800;
@@ -686,6 +687,57 @@ input:focus-visible {
   flex-wrap: wrap;
   gap: 0.42rem;
   min-width: 0;
+}
+
+.shape-menu {
+  position: relative;
+}
+
+.shape-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.shape-menu-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 8;
+  min-width: 172px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--shadow-md);
+  padding: 0.3rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.shape-menu-item {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 0.38rem 0.48rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.shape-menu-item:hover {
+  border-color: #dbe4f0;
+  background: #f8fbff;
+}
+
+.shape-menu-item--active {
+  border-color: #93c5fd;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .physics-core-controls {
@@ -894,6 +946,19 @@ input:focus-visible {
   font-weight: 700;
   background: linear-gradient(180deg, #f87171 0%, #dc2626 100%);
   white-space: nowrap;
+}
+
+.canvas-inline-text-editor {
+  position: absolute;
+  z-index: 9;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-md);
+  padding: 0.28rem 0.38rem;
+  line-height: 1.3;
+  resize: none;
+  overflow: auto;
 }
 
 .app-toast {
@@ -1177,6 +1242,16 @@ input:focus-visible {
 
   .physics-advanced-controls--open {
     display: flex;
+  }
+
+  .shape-menu-panel {
+    position: fixed;
+    left: 0.55rem;
+    right: 0.55rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    top: auto;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

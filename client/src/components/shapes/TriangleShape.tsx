@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from 'react';
-import { Circle as KonvaCircle, Group, Rect } from 'react-konva';
+import { Group, Line, Rect } from 'react-konva';
 import Konva from 'konva';
 import { CanvasObject } from '../../store/objects.js';
 
@@ -18,7 +18,16 @@ interface ShapeProps {
 const HANDLE_SIZE = 10;
 const MIN_SIZE = 32;
 
-export const CircleShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, onDragStart, onDragMove, draggable = true }) => {
+export const TriangleShape: React.FC<ShapeProps> = ({
+  object,
+  selected,
+  onMove,
+  onResize,
+  onDelete,
+  onDragStart,
+  onDragMove,
+  draggable = true,
+}) => {
   const groupRef = useRef<Konva.Group>(null);
 
   const handleDragStart = useCallback(() => {
@@ -34,15 +43,23 @@ export const CircleShape: React.FC<ShapeProps> = ({ object, selected, onMove, on
   }, [onMove]);
 
   const handleResizeEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
-    const rawWidth = Math.max(MIN_SIZE, e.target.x() + HANDLE_SIZE);
-    const rawHeight = Math.max(MIN_SIZE, e.target.y() + HANDLE_SIZE);
-    const size = Math.max(rawWidth, rawHeight);
-    onResize(size, size);
+    const nextWidth = Math.max(MIN_SIZE, e.target.x() + HANDLE_SIZE);
+    const nextHeight = Math.max(MIN_SIZE, e.target.y() + HANDLE_SIZE);
+    onResize(nextWidth, nextHeight);
   }, [onResize]);
 
   const handleDoubleClick = useCallback(() => {
     onDelete();
   }, [onDelete]);
+
+  const points = [
+    object.width / 2,
+    0,
+    object.width,
+    object.height,
+    0,
+    object.height,
+  ];
 
   return (
     <Group
@@ -56,22 +73,15 @@ export const CircleShape: React.FC<ShapeProps> = ({ object, selected, onMove, on
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >
-      <KonvaCircle
-        x={object.width / 2}
-        y={object.height / 2}
-        radius={object.width / 2}
+      <Line
+        points={points}
+        closed
         fill={object.color}
         stroke={selected ? '#0f172a' : '#333'}
         strokeWidth={selected ? 3 : 2}
         shadowColor={selected ? '#0f172a' : '#000'}
         shadowBlur={selected ? 14 : 0}
         shadowOpacity={selected ? 0.15 : 0}
-        onMouseEnter={(e) => {
-          e.target.to({ fill: '#c0392b' });
-        }}
-        onMouseLeave={(e) => {
-          e.target.to({ fill: object.color });
-        }}
       />
       <Rect
         x={Math.max(0, object.width - HANDLE_SIZE)}

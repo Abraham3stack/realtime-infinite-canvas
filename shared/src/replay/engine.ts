@@ -42,6 +42,7 @@ export interface ReplayStore {
 const OBJECT_TYPES = new Set<CanvasObject['type']>([
   'rectangle',
   'circle',
+  'triangle',
   'text',
   'sticky-note',
   'image',

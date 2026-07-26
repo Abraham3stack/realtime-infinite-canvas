@@ -9,6 +9,7 @@ interface ShapeProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onEditText?: (objectId: string) => void;
   onDragStart?: () => void;
   onDragMove?: (x: number, y: number) => void;
   draggable?: boolean;
@@ -18,7 +19,7 @@ const HANDLE_SIZE = 10;
 const MIN_WIDTH = 80;
 const MIN_HEIGHT = 32;
 
-export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, onDragStart, onDragMove, draggable = true }) => {
+export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onEditText, onDragStart, onDragMove, draggable = true }) => {
   const textRef = useRef<Konva.Text>(null);
   const groupRef = useRef<Konva.Group>(null);
 
@@ -41,8 +42,8 @@ export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onRe
   }, [onResize]);
 
   const handleDoubleClick = useCallback(() => {
-    onDelete();
-  }, [onDelete]);
+    onEditText?.(object.id);
+  }, [object.id, onEditText]);
 
   return (
     <Group
