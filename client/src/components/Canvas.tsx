@@ -2454,37 +2454,37 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={() => openUploadPicker('image')}
                 disabled={uploadInProgress || isReplayMode}
-                title="Upload Image"
+                title="Upload and insert an image onto the canvas"
                 aria-label="Upload image"
               >
-                <span aria-hidden="true">IMG+</span>
+                <span aria-hidden="true">Image</span>
               </button>
               <button
                 type="button"
                 className="tool-btn"
                 onClick={() => openUploadPicker('audio')}
                 disabled={uploadInProgress || isReplayMode}
-                title="Upload Audio"
+                title="Upload and insert audio onto the canvas"
                 aria-label="Upload audio"
               >
-                <span aria-hidden="true">AUD+</span>
+                <span aria-hidden="true">Audio</span>
               </button>
               <button
                 type="button"
                 className="tool-btn"
                 onClick={() => openUploadPicker('video')}
                 disabled={uploadInProgress || isReplayMode}
-                title="Upload Video"
+                title="Upload and insert video onto the canvas"
                 aria-label="Upload video"
               >
-                <span aria-hidden="true">VID+</span>
+                <span aria-hidden="true">Video</span>
               </button>
               <button
                 type="button"
                 className="tool-btn"
                 onClick={handleExportPng}
                 disabled={isReplayMode}
-                title="Export PNG"
+                title="Save canvas as PNG image (for sharing and presentations)"
                 aria-label="Export PNG"
               >
                 <span aria-hidden="true">PNG</span>
@@ -2494,7 +2494,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={handleExportSvg}
                 disabled={isReplayMode}
-                title="Export SVG"
+                title="Save as SVG vector (editable in design tools like Figma or Illustrator)"
                 aria-label="Export SVG"
               >
                 <span aria-hidden="true">SVG</span>
@@ -2504,7 +2504,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={handleExportJson}
                 disabled={isReplayMode}
-                title="Export JSON"
+                title="Save as JSON data (for backup or integration with other tools)"
                 aria-label="Export JSON"
               >
                 <span aria-hidden="true">JSON</span>
@@ -2515,10 +2515,10 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => {
                   void handleReplayPanelToggle();
                 }}
-                title={isReplayMode ? 'Exit Replay Mode' : 'Open Replay Panel'}
+                title={isReplayMode ? 'Exit replay mode and return to live canvas' : 'Open replay panel to watch event history'}
                 aria-label={isReplayMode ? 'Exit replay mode' : 'Open replay panel'}
               >
-                <span aria-hidden="true">RPL</span>
+                <span aria-hidden="true">Replay</span>
               </button>
             </div>
           </div>
@@ -2538,9 +2538,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={isReplayMode}
                 aria-label="Toggle physics mode"
                 aria-pressed={roomPhysics.enabled}
-                title="Physics mode"
+                title="Enable physics simulation: gravity, bouncing, throwing, and force fields"
               >
-                <span aria-hidden="true">PHY</span>
+                <span aria-hidden="true">Physics</span>
               </button>
               <button
                 type="button"
@@ -2549,7 +2549,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Toggle physics simulation"
                 aria-pressed={roomPhysics.simulationRunning}
-                title={roomPhysics.simulationRunning ? 'Pause simulation' : 'Resume simulation'}
+                title={roomPhysics.enabled ? (roomPhysics.simulationRunning ? 'Pause physics simulation' : 'Start physics simulation') : 'Enable Physics first to use this control'}
               >
                 <span aria-hidden="true">{roomPhysics.simulationRunning ? 'Pause' : 'Run'}</span>
               </button>
@@ -2560,9 +2560,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Toggle advanced physics controls"
                 aria-pressed={isPhysicsControlsExpanded}
-                title="More physics controls"
+                title="Show/hide gravity, bounce, and friction controls"
               >
-                <span aria-hidden="true">Phys+</span>
+                <span aria-hidden="true">Advanced</span>
               </button>
             </div>
 
@@ -2655,7 +2655,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
                 aria-label="Toggle attraction field"
                 aria-pressed={fieldMode === 'attract'}
-                title="Attract nearby physics objects"
+                title="Enable force field that pulls nearby objects toward center (radius: 340px)"
               >
                 <span aria-hidden="true">Attract</span>
               </button>
@@ -2666,7 +2666,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
                 aria-label="Toggle repulsion field"
                 aria-pressed={fieldMode === 'repel'}
-                title="Repel nearby physics objects"
+                title="Enable force field that pushes nearby objects away from center (radius: 340px)"
               >
                 <span aria-hidden="true">Repel</span>
               </button>
