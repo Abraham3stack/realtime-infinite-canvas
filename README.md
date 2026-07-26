@@ -278,6 +278,18 @@ Throw momentum is implemented for physics-enabled drag interactions using recent
 - Pinned objects cannot be thrown
 - Release velocity metadata is propagated through existing object update synchronization so remote collaborators observe the same throw direction and speed
 
+## Attraction & Repulsion Fields (Phase 5.8)
+
+Temporary magnetic-style force fields are available for physics-enabled objects.
+
+- Two modes are available: `Attract` and `Repel`
+- While a mode is active, holding the pointer applies the field; releasing stops force application
+- Force is strongest near the pointer and decays with distance
+- Force is capped to preserve stable simulation behavior
+- Pinned/static objects are ignored by field forces
+- Field effects reuse Matter.js `Body.applyForce()` inside the host-authoritative simulation loop
+- Followers observe matching motion through the existing physics/object synchronization pipeline
+
 ## Mini-map & Collaborator Radar (Phase 5.2)
 
 Mini-map and radar are integrated as a canvas overlay and synchronized through existing Socket.IO room state.
@@ -348,8 +360,9 @@ Shortcuts are ignored while typing in input or textarea fields.
 
 ## Known Limitations
 
-- Physics simulation is limited to rectangle and circle objects
+- Physics simulation is limited to rectangle, circle, and text objects
 - Physics authority is single-host (room creator)
+- Attraction/repulsion controls are host-driven in the current authority model
 - Presence persistence is optimized for active sessions and is best-effort
 - Offline queue currently stores object create/update/delete only (media uploads remain online-only)
 

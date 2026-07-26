@@ -1689,6 +1689,47 @@ Implement predictable throw momentum for physics-enabled object drags without mo
   - Host throw propagated to follower clients in the same room
 - Evidence bundle: `docs/validation/evidence/phase3_throw_physics_2026-07-26T14-55-00Z/`
 
+## Phase 5.8 - Attraction & Repulsion
+
+### Status
+
+- ✅ COMPLETE
+
+### Goal
+
+Add temporary attraction/repulsion force fields for nearby physics-enabled objects without changing replay architecture, offline sync architecture, room event architecture, or collaboration architecture.
+
+### Completed
+
+- Added toolbar controls for `Attract` and `Repel` modes in physics-enabled sessions
+- Implemented hold-to-apply field interaction (pointer down applies force, pointer up stops)
+- Applied distance-falloff force using Matter.js `Body.applyForce()` in the existing host-authoritative tick loop
+- Added force capping and minimum effective distance guards for simulation stability
+- Excluded pinned/static objects from field force application
+- Preserved existing drag/resize/object update and replay/minimap/offline pathways
+
+### Validation Results
+
+- `npm run typecheck` ✅
+- `npm run lint` ✅
+- `npm run build` ✅
+- `npm test` ✅
+- Single-client browser validation ✅
+  - Attract rectangle
+  - Attract circle
+  - Repel rectangle
+  - Repel circle
+  - Pinned object unaffected
+- Multiplayer browser validation ✅
+  - Host attract interaction
+  - Follower observed matching object motion
+- Regression validation ✅
+  - Throw physics interaction still functional
+  - Replay panel opens
+  - Mini-map remains available
+  - Offline-mode indicator and queue behavior remain intact
+- Evidence bundle: `docs/validation/evidence/phase4_attraction_repulsion_2026-07-26T15-35-00Z/`
+
 ---
 
 ## Scope Protection Rules

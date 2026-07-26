@@ -66,6 +66,7 @@ interface RoomEventsListResponsePayload {
 }
 
 type PresenceStatus = 'active' | 'idle';
+type FieldMode = 'attract' | 'repel' | null;
 
 interface DragPointerSample {
   x: number;
@@ -96,6 +97,9 @@ const PHYSICS_THROW_SAMPLE_LIMIT = 8;
 const PHYSICS_THROW_SAMPLE_WINDOW_MS = 160;
 const PHYSICS_THROW_MIN_MOVEMENT_PX = 4;
 const PHYSICS_THROW_MIN_SPEED = 0.05;
+const PHYSICS_FIELD_RADIUS_PX = 340;
+const PHYSICS_FIELD_MAX_FORCE = 0.00045;
+const PHYSICS_FIELD_MIN_DISTANCE_PX = 14;
 const PRESENCE_SYNC_INTERVAL_MS = 120;
 const REPLAY_BASE_STEP_INTERVAL_MS = 250;
 
@@ -541,6 +545,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [replayEvents, setReplayEvents] = useState<RoomEvent[]>([]);
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1);
+  const [fieldMode, setFieldMode] = useState<FieldMode>(null);
   
   // Viewport state: pan and zoom transforms
   const { offsetX, offsetY, scale, panBy, zoomBy, setPan } = useViewportStore((s) => ({
@@ -589,6 +594,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const resetSnapshotRef = useRef<Map<string, { x: number; y: number; rotation: number }>>(new Map());
   const lastSyncTsRef = useRef(0);
   const dragMomentumRef = useRef<Map<string, DragMomentumState>>(new Map());
+  const fieldActionRef = useRef<{ active: boolean; mode: Exclude<FieldMode, null>; worldX: number; worldY: number } | null>(null);
   const roomPhysicsRef = useRef(roomPhysics);
   const pinnedSetRef = useRef<Set<string>>(new Set());
   const presenceSyncRef = useRef<{ lastSentAt: number; timer: number | null }>({
@@ -620,6 +626,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!room?.createdBySessionId || !sessionId) return false;
     return room.createdBySessionId === sessionId;
   }, [room?.createdBySessionId, sessionId]);
+
+  const isFieldActionEnabled = Boolean(
+    roomPhysics.enabled &&
+    roomPhysics.simulationRunning &&
+    isPhysicsAuthority &&
+    !isReplayMode &&
+    fieldMode
+  );
 
   const loadReplayEvents = useCallback(async (): Promise<RoomEvent[]> => {
     if (!room) return [];
@@ -733,6 +747,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     setIsReplayPanelOpen(false);
     setReplayEvents([]);
     setReplayError(null);
+    setFieldMode(null);
+    fieldActionRef.current = null;
   }, [room?.id]);
 
   const pinnedSet = useMemo(() => new Set(roomPhysics.staticObjectIds), [roomPhysics.staticObjectIds]);
@@ -747,6 +763,9 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   useEffect(() => {
     roomPhysicsRef.current = roomPhysics;
+    if (!roomPhysics.enabled || !roomPhysics.simulationRunning) {
+      fieldActionRef.current = null;
+    }
   }, [roomPhysics]);
 
   useEffect(() => {
@@ -1529,6 +1548,31 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!engine) return;
 
     const tick = () => {
+      const activeField = fieldActionRef.current;
+      if (activeField?.active && roomPhysicsRef.current.enabled && roomPhysicsRef.current.simulationRunning) {
+        for (const [objectId, body] of bodyMapRef.current.entries()) {
+          if (pinnedSetRef.current.has(objectId) || body.isStatic) continue;
+
+          const dx = activeField.worldX - body.position.x;
+          const dy = activeField.worldY - body.position.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance <= 0 || distance > PHYSICS_FIELD_RADIUS_PX) continue;
+
+          const falloff = 1 - distance / PHYSICS_FIELD_RADIUS_PX;
+          const clampedDistance = Math.max(PHYSICS_FIELD_MIN_DISTANCE_PX, distance);
+          const directionScale = activeField.mode === 'attract' ? 1 : -1;
+          const forceMagnitude = Math.min(
+            PHYSICS_FIELD_MAX_FORCE,
+            ((PHYSICS_FIELD_MAX_FORCE * falloff * falloff) / clampedDistance) * PHYSICS_FIELD_RADIUS_PX
+          );
+
+          Matter.Body.applyForce(body, body.position, {
+            x: (dx / clampedDistance) * forceMagnitude * directionScale,
+            y: (dy / clampedDistance) * forceMagnitude * directionScale,
+          });
+        }
+      }
+
       Matter.Engine.update(engine, 1000 / 60);
 
       const updates: Array<{ objectId: string; x: number; y: number; rotation: number }> = [];
@@ -1594,6 +1638,24 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Track mouse state for panning
   const isPanning = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
+
+  const updateFieldActionPointer = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage();
+    if (!stage || !fieldMode || !isFieldActionEnabled) return;
+
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+
+    const worldX = (pointer.x - offsetX) / scale;
+    const worldY = (pointer.y - offsetY) / scale;
+
+    fieldActionRef.current = {
+      active: true,
+      mode: fieldMode,
+      worldX,
+      worldY,
+    };
+  }, [fieldMode, isFieldActionEnabled, offsetX, offsetY, scale]);
 
   // Keyboard shortcuts for object creation
   useEffect(() => {
@@ -1923,6 +1985,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     const clickedStage = e.target === e.target.getStage();
 
     if (clickedStage) {
+      if (isFieldActionEnabled) {
+        updateFieldActionPointer(e);
+      }
+
       setSelectedObjectId(null);
       isPanning.current = true;
       lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY };
@@ -1934,12 +2000,16 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (objectId) {
       setSelectedObjectId(objectId);
     }
-  }, []);
+  }, [isFieldActionEnabled, updateFieldActionPointer]);
 
   // Mouse move: pan if dragging.
   // Input events can arrive much faster than paint frames; batching pan deltas in
   // rAF keeps interaction smooth under sustained pointer movement.
   const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (fieldActionRef.current?.active) {
+      updateFieldActionPointer(e);
+    }
+
     if (!isPanning.current) return;
 
     const deltaX = e.evt.clientX - lastMousePos.current.x;
@@ -1959,11 +2029,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY };
-  }, [panBy]);
+  }, [panBy, updateFieldActionPointer]);
 
   // Mouse up: stop panning
   const handleMouseUp = useCallback(() => {
     isPanning.current = false;
+    fieldActionRef.current = null;
     if (panRafRef.current !== null) {
       window.cancelAnimationFrame(panRafRef.current);
       panRafRef.current = null;
@@ -2084,6 +2155,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!selectedObject || !selectedObjectSupportsPhysics) return;
     emitPhysicsSetStatic(selectedObject.id, !selectedObjectIsPinned);
   }, [emitPhysicsSetStatic, selectedObject, selectedObjectIsPinned, selectedObjectSupportsPhysics]);
+
+  const handleToggleFieldMode = useCallback((mode: Exclude<FieldMode, null>) => {
+    setFieldMode((current) => (current === mode ? null : mode));
+    fieldActionRef.current = null;
+  }, []);
 
   const handleResetPhysics = useCallback(() => {
     emitPhysicsReset();
@@ -2282,6 +2358,28 @@ export const Canvas: React.FC<CanvasProps> = ({
           >
             <span aria-hidden="true">Reset</span>
           </button>
+          <button
+            type="button"
+            className={fieldMode === 'attract' ? 'tool-btn active' : 'tool-btn'}
+            onClick={() => handleToggleFieldMode('attract')}
+            disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
+            aria-label="Toggle attraction field"
+            aria-pressed={fieldMode === 'attract'}
+            title="Attract nearby physics objects"
+          >
+            <span aria-hidden="true">Attract</span>
+          </button>
+          <button
+            type="button"
+            className={fieldMode === 'repel' ? 'tool-btn active' : 'tool-btn'}
+            onClick={() => handleToggleFieldMode('repel')}
+            disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
+            aria-label="Toggle repulsion field"
+            aria-pressed={fieldMode === 'repel'}
+            title="Repel nearby physics objects"
+          >
+            <span aria-hidden="true">Repel</span>
+          </button>
           <span className={loadingPhase ? 'users-chip users-chip--loading' : 'users-chip'} aria-label={`Users in room: ${participantCount}`}>
             {loadingPhase ? 'Syncing...' : `${participantCount} users`}
           </span>
@@ -2303,6 +2401,11 @@ export const Canvas: React.FC<CanvasProps> = ({
           {roomPhysics.enabled ? (
             <span className="users-chip" aria-label="Physics status">
               {isPhysicsAuthority ? 'Physics Host' : 'Physics Follower'} | g {roomPhysics.gravityY.toFixed(1)} | b {roomPhysics.restitution.toFixed(2)} | f {roomPhysics.frictionAir.toFixed(3)}
+            </span>
+          ) : null}
+          {fieldMode && roomPhysics.enabled ? (
+            <span className={fieldActionRef.current?.active ? 'users-chip users-chip--loading' : 'users-chip'} aria-label="Field interaction mode">
+              Field: {fieldMode === 'attract' ? 'Attract' : 'Repel'}
             </span>
           ) : null}
           {isReplayMode ? (
