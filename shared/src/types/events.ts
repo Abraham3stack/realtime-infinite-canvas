@@ -84,6 +84,9 @@ export interface PresenceUpdatePayload {
 // Server -> Room: presence:updated
 export interface PresenceUpdatedPayload extends Presence {
   participantId: string;
+  sessionId: string;
+  roomId: string;
+  displayName: string;
 }
 
 // Client -> Server: cursor:update

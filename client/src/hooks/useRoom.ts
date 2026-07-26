@@ -76,10 +76,16 @@ export function useCreateRoom() {
           setParticipants(participants.map((p) => ({
             id: p.id as string,
             roomId: p.roomId as string,
+            sessionId: p.sessionId as string | undefined,
             displayName: p.displayName as string,
             joinedAt: p.joinedAt as string,
             lastSeenAt: p.lastSeenAt as string,
             isActive: p.isActive as boolean,
+            lastViewportX: p.lastViewportX as number | undefined,
+            lastViewportY: p.lastViewportY as number | undefined,
+            lastViewportZoom: p.lastViewportZoom as number | undefined,
+            lastViewportWidth: p.lastViewportWidth as number | undefined,
+            lastViewportHeight: p.lastViewportHeight as number | undefined,
           })));
 
           if (response.physicsState) {
@@ -131,10 +137,16 @@ export function useJoinRoom() {
           setParticipants(participants.map((p) => ({
             id: p.id as string,
             roomId: p.roomId as string,
+            sessionId: p.sessionId as string | undefined,
             displayName: p.displayName as string,
             joinedAt: p.joinedAt as string,
             lastSeenAt: p.lastSeenAt as string,
             isActive: p.isActive as boolean,
+            lastViewportX: p.lastViewportX as number | undefined,
+            lastViewportY: p.lastViewportY as number | undefined,
+            lastViewportZoom: p.lastViewportZoom as number | undefined,
+            lastViewportWidth: p.lastViewportWidth as number | undefined,
+            lastViewportHeight: p.lastViewportHeight as number | undefined,
           })));
 
           // Snapshot hydration is atomic at the store boundary to avoid mixed
@@ -265,10 +277,16 @@ export function useRoomAutoRejoin(): void {
         setParticipants(participants.map((p) => ({
           id: p.id as string,
           roomId: p.roomId as string,
+          sessionId: p.sessionId as string | undefined,
           displayName: p.displayName as string,
           joinedAt: p.joinedAt as string,
           lastSeenAt: p.lastSeenAt as string,
           isActive: p.isActive as boolean,
+          lastViewportX: p.lastViewportX as number | undefined,
+          lastViewportY: p.lastViewportY as number | undefined,
+          lastViewportZoom: p.lastViewportZoom as number | undefined,
+          lastViewportWidth: p.lastViewportWidth as number | undefined,
+          lastViewportHeight: p.lastViewportHeight as number | undefined,
         })));
 
         const canvasObjects = (response.canvasObjects || []) as Array<Record<string, unknown>>;

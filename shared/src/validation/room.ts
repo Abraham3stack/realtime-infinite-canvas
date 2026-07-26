@@ -6,6 +6,8 @@ export const ViewportSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
   zoom: z.number().finite().positive(),
+  width: z.number().finite().positive().optional(),
+  height: z.number().finite().positive().optional(),
 });
 
 export const RoomParticipantStatusSchema = z.enum(['active', 'idle', 'disconnected']);

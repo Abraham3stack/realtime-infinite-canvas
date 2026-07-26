@@ -1358,14 +1358,43 @@ Implement high-scoring creative features in strict priority order after MVP stab
 
 ### ⚠️ Remaining Scope (Phase 5)
 
-- Mini-map and radar with collaborator location indicators
 - Offline sync stretch implementation (only if it does not regress core correctness)
+
+### Status
+
+- ✅ Physics COMPLETE
+- ✅ Mini-map & Radar COMPLETE
+- ⏳ Offline Sync (Stretch Goal)
 
 ### Acceptance Criteria
 
 - Physics interactions are demo-ready and stable
 - Mini-map/radar accurately reflects viewport and user location
 - Offline stretch only accepted if it does not degrade core realtime correctness
+
+### Phase 5.2 Completion Summary (Mini-map & Radar)
+
+- Implemented independent mini-map overlay in client runtime with bottom-right collapsible UI
+- Added local viewport projection and interactive click/drag navigation from mini-map to main canvas
+- Added collaborator radar rectangles + optional labels mapped from participant presence
+- Added `presence:update` -> `presence:updated` realtime flow with throttled server-side persistence and room broadcast
+- Integrated late-join/reconnect hydration by merging room snapshot participant viewport fields with in-memory presence cache
+- Preserved host-authoritative physics behavior and avoided changes to object simulation semantics
+
+### Validation Summary (Final)
+
+- ✅ `npm run typecheck`
+- ✅ `npm run lint`
+- ✅ `npm run build`
+- ✅ `npm test`
+- ✅ Two-browser same-origin validation passed for mini-map, radar, realtime sync, late join, reconnect, exports, object CRUD, and physics controls
+- ✅ No console/runtime errors observed during final browser validation pass
+
+### Architecture Notes
+
+- Presence updates are room-scoped (`presence:update` -> `presence:updated`) and decoupled from object mutation streams
+- Room snapshots now carry participant viewport/session data so late-join and reconnect paths converge quickly
+- Mini-map rendering is isolated from the primary Konva stage to reduce interference with main-frame render cost
 
 ### Risks
 
@@ -1376,13 +1405,14 @@ Implement high-scoring creative features in strict priority order after MVP stab
 ### Estimated Time
 
 - Physics: 3 to 5 hours
-- Mini-map + radar: 2 to 3 hours
+- Mini-map + radar: 2 to 3 hours (completed)
 - Offline stretch: 3 to 5 hours (only if schedule allows)
 
 ### Dependencies
 
 - Phase 4 performance gate complete
 - Stable object lifecycle and event model
+- Physics slice complete and validated
 
 ### Validation Gates
 
@@ -1401,12 +1431,12 @@ Implement high-scoring creative features in strict priority order after MVP stab
 ### 📝 Technical Debt
 
 - Add CI-stable browser assertions for physics evidence (counts, body-ID stability, bounce polarity checks)
-- Extend automated multiplayer physics scenarios to include pin/unpin transitions and long-run drift checks
-- Consider extracting physics reconciliation and authority rules into dedicated modules for maintainability as Mini-map/Radar is added
+- Extend automated multiplayer scenarios with scripted collaborator radar pathing and reconnect-presence assertions
+- Add optional presence heartbeat decay policy tuning and observability metrics for large rooms
 
 ---
 
-## Phase 6 - Final Polish, Regression, and Submission Readiness
+## Phase 6 — Final Polish, Regression & Submission Readiness
 
 ### Goal
 

@@ -117,10 +117,16 @@ const App: FC = () => {
     useRoomStore.getState().addParticipant({
       id: participant.id as string,
       roomId: participant.roomId as string,
+      sessionId: participant.sessionId as string | undefined,
       displayName: participant.displayName as string,
       joinedAt: participant.joinedAt as string,
       lastSeenAt: participant.lastSeenAt as string,
       isActive: participant.isActive as boolean,
+      lastViewportX: participant.lastViewportX as number | undefined,
+      lastViewportY: participant.lastViewportY as number | undefined,
+      lastViewportZoom: participant.lastViewportZoom as number | undefined,
+      lastViewportWidth: participant.lastViewportWidth as number | undefined,
+      lastViewportHeight: participant.lastViewportHeight as number | undefined,
     });
   }, []);
 

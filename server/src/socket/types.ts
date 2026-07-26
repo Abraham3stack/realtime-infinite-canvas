@@ -6,4 +6,5 @@ export interface AuthenticatedSocket extends SocketIOSocket {
   userId?: string;
   displayName?: string;
   roomId?: string;
+  participantId?: string;
 }

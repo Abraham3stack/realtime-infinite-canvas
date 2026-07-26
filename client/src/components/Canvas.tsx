@@ -6,6 +6,7 @@ import { useViewportStore } from '../store/viewport.js';
 import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
 import { useRoomStore } from '../store/room.js';
 import { ObjectRenderer } from './ObjectRenderer.js';
+import { MiniMapRadar } from './MiniMapRadar.js';
 import { LoadingOverlay } from './ui/LoadingOverlay.js';
 import { socket } from '../socket.js';
 import type { CanvasObjectType } from '../store/objects.js';
@@ -39,6 +40,21 @@ interface PhysicsStatePayload {
   serverTs: string;
 }
 
+interface PresenceUpdatedPayload {
+  participantId: string;
+  sessionId: string;
+  roomId: string;
+  viewport?: {
+    x: number;
+    y: number;
+    zoom: number;
+    width?: number;
+    height?: number;
+  };
+  status: 'active' | 'idle' | 'disconnected';
+  serverTs: string;
+}
+
 interface DragVelocitySample {
   startX: number;
   startY: number;
@@ -52,6 +68,7 @@ const PHYSICS_OBJECT_TYPES: CanvasObjectType[] = ['rectangle', 'circle'];
 const PHYSICS_OBJECT_TYPE_SET = new Set<CanvasObjectType>(PHYSICS_OBJECT_TYPES);
 const PHYSICS_SYNC_INTERVAL_MS = 80;
 const PHYSICS_DRAG_VELOCITY_MAX = 2.5;
+const PRESENCE_SYNC_INTERVAL_MS = 120;
 
 function isPhysicsObjectType(type: CanvasObjectType): boolean {
   return PHYSICS_OBJECT_TYPE_SET.has(type);
@@ -139,12 +156,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [failedUpload, setFailedUpload] = useState<{ files: File[]; mediaType: MediaUploadType; message: string } | null>(null);
   
   // Viewport state: pan and zoom transforms
-  const { offsetX, offsetY, scale, panBy, zoomBy } = useViewportStore((s) => ({
+  const { offsetX, offsetY, scale, panBy, zoomBy, setPan } = useViewportStore((s) => ({
     offsetX: s.offsetX,
     offsetY: s.offsetY,
     scale: s.scale,
     panBy: s.panBy,
     zoomBy: s.zoomBy,
+    setPan: s.setPan,
   }));
 
   // Canvas objects: local CRUD state
@@ -156,6 +174,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     deleteObject: s.deleteObject,
   }));
   const { room } = useRoomStore((s) => ({ room: s.room }));
+  const participants = useRoomStore((s) => s.participants);
   const roomPhysics = usePhysicsStore((s) => s.roomPhysics);
   const setRoomPhysics = usePhysicsStore((s) => s.setRoomPhysics);
 
@@ -177,6 +196,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   const dragVelocityRef = useRef<Map<string, DragVelocitySample>>(new Map());
   const roomPhysicsRef = useRef(roomPhysics);
   const pinnedSetRef = useRef<Set<string>>(new Set());
+  const presenceSyncRef = useRef<{ lastSentAt: number; timer: number | null }>({
+    lastSentAt: 0,
+    timer: null,
+  });
 
   const isPhysicsAuthority = useMemo(() => {
     if (!room?.createdBySessionId || !sessionId) return false;
@@ -1016,11 +1039,67 @@ export const Canvas: React.FC<CanvasProps> = ({
       setRoomPhysics(payload.state);
     };
 
+    const handlePresenceUpdated = (payload: PresenceUpdatedPayload) => {
+      if (!payload || payload.roomId !== room.id || !payload.participantId) return;
+
+      useRoomStore.getState().updateParticipantPresence(payload.participantId, {
+        sessionId: payload.sessionId,
+        lastViewportX: payload.viewport?.x,
+        lastViewportY: payload.viewport?.y,
+        lastViewportZoom: payload.viewport?.zoom,
+        lastViewportWidth: payload.viewport?.width,
+        lastViewportHeight: payload.viewport?.height,
+        presenceStatus: payload.status,
+        presenceTs: payload.serverTs,
+      });
+    };
+
     socket.on('physics:state', handlePhysicsState);
+    socket.on('presence:updated', handlePresenceUpdated);
     return () => {
       socket.off('physics:state', handlePhysicsState);
+      socket.off('presence:updated', handlePresenceUpdated);
     };
   }, [room, setRoomPhysics]);
+
+  useEffect(() => {
+    if (!room) return;
+
+    const emitPresence = () => {
+      socket.emit('presence:update', {
+        roomId: room.id,
+        status: 'active',
+        viewport: {
+          x: offsetX,
+          y: offsetY,
+          zoom: scale,
+          width: stageSize.width,
+          height: stageSize.height,
+        },
+      });
+      presenceSyncRef.current.lastSentAt = Date.now();
+    };
+
+    const now = Date.now();
+    const elapsed = now - presenceSyncRef.current.lastSentAt;
+    const remaining = PRESENCE_SYNC_INTERVAL_MS - elapsed;
+
+    if (remaining <= 0) {
+      if (presenceSyncRef.current.timer !== null) {
+        window.clearTimeout(presenceSyncRef.current.timer);
+        presenceSyncRef.current.timer = null;
+      }
+      emitPresence();
+      return;
+    }
+
+    if (presenceSyncRef.current.timer === null) {
+      presenceSyncRef.current.timer = window.setTimeout(() => {
+        presenceSyncRef.current.timer = null;
+        emitPresence();
+      }, remaining);
+    }
+  }, [offsetX, offsetY, room, scale, stageSize.height, stageSize.width]);
 
   // Update stage size on mount and resize
   useEffect(() => {
@@ -1163,6 +1242,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
       if (animationFrameRef.current !== null) {
         window.cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (presenceSyncRef.current.timer !== null) {
+        window.clearTimeout(presenceSyncRef.current.timer);
       }
       clearMatterRuntime();
     };
@@ -1469,6 +1551,15 @@ export const Canvas: React.FC<CanvasProps> = ({
           ))}
         </Layer>
       </Stage>
+
+      <MiniMapRadar
+        objects={objects}
+        participants={participants}
+        currentSessionId={sessionId}
+        viewport={{ offsetX, offsetY, scale }}
+        stageSize={stageSize}
+        onSetPan={setPan}
+      />
 
       <input
         ref={imageUploadInputRef}

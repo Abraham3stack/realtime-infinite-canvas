@@ -5,6 +5,7 @@ import { ErrorCodes } from '@realtime-canvas/shared';
 import type { AuthenticatedSocket } from '../types.js';
 import { getRoomObjects } from './objects.js';
 import { getRoomPhysicsState, type RoomPhysicsState } from './physics.js';
+import { getRoomPresenceSnapshot, removeParticipantPresence } from './presence.js';
 
 const generateShareCode = customAlphabet('23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz', 6);
 
@@ -40,8 +41,6 @@ interface RoomJoinPayload {
  */
 export function registerRoomHandlers(io: Server): void {
   io.on('connection', (socket: Socket) => {
-    console.log(`[socket] connected  id=${socket.id}`);
-
     socket.emit('server:hello', {
       socketId: socket.id,
       serverTs: new Date().toISOString(),
@@ -100,6 +99,7 @@ export function registerRoomHandlers(io: Server): void {
         // connected sockets in this room key.
         socket.join(room.id);
         authSocket.roomId = room.id;
+        authSocket.participantId = participant.id;
 
         callback({
           roomId: room.id,
@@ -110,10 +110,14 @@ export function registerRoomHandlers(io: Server): void {
           participant: {
             id: participant.id,
             roomId: room.id,
+            sessionId,
             displayName: participant.session.user.displayName,
             joinedAt: participant.joinedAt.toISOString(),
             lastSeenAt: participant.lastSeenAt.toISOString(),
             isActive: true,
+            lastViewportX: participant.lastViewportX,
+            lastViewportY: participant.lastViewportY,
+            lastViewportZoom: participant.lastViewportZoom,
           },
           initialState: {
             roomId: room.id,
@@ -122,16 +126,18 @@ export function registerRoomHandlers(io: Server): void {
               {
                 id: participant.id,
                 roomId: room.id,
+                sessionId,
                 displayName: participant.session.user.displayName,
                 joinedAt: participant.joinedAt.toISOString(),
                 lastSeenAt: participant.lastSeenAt.toISOString(),
                 isActive: true,
+                lastViewportX: participant.lastViewportX,
+                lastViewportY: participant.lastViewportY,
+                lastViewportZoom: participant.lastViewportZoom,
               },
             ],
           },
         });
-
-        console.log(`[room] created  id=${room.id} code=${room.shareCode} by=${sessionId}`);
       } catch (err) {
         console.error('[room:create] error:', err);
         callback({ code: ErrorCodes.ROOM_CREATE_FAILED, message: 'Failed to create room' });
@@ -203,14 +209,25 @@ export function registerRoomHandlers(io: Server): void {
         // Socket joins the Socket.IO room.
         socket.join(room.id);
         authSocket.roomId = room.id;
+        authSocket.participantId = participant.id;
+
+        const presenceByParticipantId = new Map(
+          getRoomPresenceSnapshot(room.id).map((presence) => [presence.participantId, presence])
+        );
 
         const snapshotParticipants = participants.map((p) => ({
           id: p.id,
           roomId: p.roomId,
+          sessionId: p.sessionId,
           displayName: p.session.user.displayName,
           joinedAt: p.joinedAt.toISOString(),
           lastSeenAt: p.lastSeenAt.toISOString(),
           isActive: p.isActive,
+          lastViewportX: presenceByParticipantId.get(p.id)?.viewport.x ?? p.lastViewportX,
+          lastViewportY: presenceByParticipantId.get(p.id)?.viewport.y ?? p.lastViewportY,
+          lastViewportZoom: presenceByParticipantId.get(p.id)?.viewport.zoom ?? p.lastViewportZoom,
+          lastViewportWidth: presenceByParticipantId.get(p.id)?.viewport.width,
+          lastViewportHeight: presenceByParticipantId.get(p.id)?.viewport.height,
         }));
 
         // Send the state snapshot directly to the joining socket. This is the
@@ -231,15 +248,17 @@ export function registerRoomHandlers(io: Server): void {
           participant: {
             id: participant.id,
             roomId: room.id,
+            sessionId,
             displayName: participant.session.user.displayName,
             joinedAt: participant.joinedAt.toISOString(),
             lastSeenAt: participant.lastSeenAt.toISOString(),
             isActive: true,
+            lastViewportX: participant.lastViewportX,
+            lastViewportY: participant.lastViewportY,
+            lastViewportZoom: participant.lastViewportZoom,
           },
           serverTs: new Date().toISOString(),
         });
-
-        console.log(`[room] joined  id=${room.id} participant=${sessionId}`);
       } catch (err) {
         console.error('[room:join] error:', err);
         callback({ code: ErrorCodes.ROOM_JOIN_DENIED, message: 'Failed to join room' });
@@ -271,6 +290,7 @@ export function registerRoomHandlers(io: Server): void {
             where: { id: participant.id },
             data: { isActive: false },
           });
+          removeParticipantPresence(roomId, participant.id);
 
           // Broadcast departure to remaining participants.
           socket.to(roomId).emit('room:userLeft', {
@@ -282,9 +302,9 @@ export function registerRoomHandlers(io: Server): void {
 
         socket.leave(roomId);
         authSocket.roomId = undefined;
+        authSocket.participantId = undefined;
 
         callback({ success: true });
-        console.log(`[room] left  id=${roomId} participant=${sessionId}`);
       } catch (err) {
         console.error('[room:leave] error:', err);
         callback({ success: false });
@@ -292,7 +312,7 @@ export function registerRoomHandlers(io: Server): void {
     });
 
     // Handle disconnect: clean up the participant and leave the room.
-    socket.on('disconnect', async (reason: string) => {
+    socket.on('disconnect', async (_reason: string) => {
       const authSocket = socket as AuthenticatedSocket;
       const { roomId, sessionId } = authSocket;
 
@@ -307,6 +327,7 @@ export function registerRoomHandlers(io: Server): void {
               where: { id: participant.id },
               data: { isActive: false },
             });
+            removeParticipantPresence(roomId, participant.id);
 
             // Broadcast departure.
             io.to(roomId).emit('room:userLeft', {
@@ -320,7 +341,7 @@ export function registerRoomHandlers(io: Server): void {
         }
       }
 
-      console.log(`[socket] disconnected  id=${socket.id} reason=${reason}`);
+      authSocket.participantId = undefined;
     });
   });
 }

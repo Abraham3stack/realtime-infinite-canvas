@@ -220,7 +220,60 @@ Intentional limitations:
 
 - Text, sticky note, image, audio, and video objects are not simulated as dynamic Matter bodies
 - Physics controls are room-scoped and authority is single-host
-- Mini-map/radar and offline sync are not part of the shipped physics slice
+
+## Mini-map & Collaborator Radar (Phase 5.2)
+
+Mini-map and radar are integrated as a canvas overlay and synchronized through existing Socket.IO room state.
+
+- Bottom-right, collapsible mini-map overlay
+- Reduced-scale rendering of all supported canvas objects
+- Local viewport rectangle shown live during pan/zoom
+- Click-to-navigate and drag-to-pan interactions from mini-map
+- Collaborator viewport rectangles with deterministic unique colors and optional labels
+- Live collaborator viewport updates using throttled presence events
+- Late-join and reconnect radar hydration through room snapshots + realtime presence stream
+
+Controls:
+
+- `Map/Hide`: collapse or expand the mini-map overlay
+- `Labels/No labels`: show or hide collaborator display-name tags
+- Click inside mini-map: center the main viewport on clicked world position
+- Drag local viewport rectangle inside mini-map: pan main canvas continuously
+
+Performance characteristics:
+
+- Geometry bounds and object-projection calculations are memoized
+- Presence updates are throttled/coalesced to reduce high-frequency traffic
+- Mini-map rendering is isolated from primary Konva renderer and uses lightweight DOM primitives
+
+Known limitations:
+
+- Radar tracks viewport positions for active participants only
+- Presence viewport persistence is best-effort and optimized for active session continuity
+- Offline sync remains the only pending Phase 5 scope
+
+## Current Feature List
+
+- Guest session creation and token-based Socket.IO authentication
+- Room create/join/leave flows with share-code collaboration
+- Realtime canvas object CRUD synchronization across connected participants
+- Mandatory object types: rectangle, circle, text, sticky note, image, audio, video
+- Cloudinary-backed media upload + metadata persistence
+- PNG export and JSON export
+- Matter.js host-authoritative physics simulation for supported object types
+- Mini-map overlay with click-to-navigate and drag-to-pan
+- Collaborator radar with presence-synchronized viewport rectangles
+- Late-join room hydration for objects, participants, physics state, and presence-derived viewport metadata
+- Reconnect behavior that restores room state from snapshot and resumes live synchronization
+
+## Keyboard Shortcuts
+
+- `R`: Create rectangle
+- `C`: Create circle
+- `T`: Create text object
+- `S`: Create sticky note
+
+Shortcuts are ignored while typing in input or textarea fields.
 
 ## Architecture Overview
 
@@ -228,7 +281,16 @@ Intentional limitations:
 - Physics runtime: Matter.js inside the canvas runtime
 - Realtime transport: Socket.IO
 - Authority model: host-authoritative simulation, follower-side rendering and sync consumption
-- Persistence and hydration: room/object state from backend snapshot + realtime stream
+- Presence synchronization: collaborator viewport/status updates over room-scoped presence events
+- Persistence and hydration: room/object/participant snapshot bootstrap + realtime stream convergence
+- Reconnect strategy: snapshot re-hydration followed by incremental event replay/consumption
+
+## Known Limitations
+
+- Physics simulation is limited to rectangle and circle objects
+- Physics authority is single-host (room creator)
+- Presence persistence is optimized for active sessions and is best-effort
+- Offline sync is not yet implemented (Phase 5 stretch scope)
 
 ## Technology Stack
 
@@ -292,7 +354,7 @@ Frontend React application with Vite build system.
 - **Phase 2** - Infinite Canvas and Mandatory Object Types ✅
 - **Phase 3** - Media Pipeline and Export Verification ✅
 - **Phase 4** - Performance Hardening for Judging Conditions ✅
-- **Phase 5** - Creative Features (physics complete; mini-map/radar and offline sync remaining)
+- **Phase 5** - Creative Features (physics + mini-map/radar complete; offline sync remaining)
 - **Phase 6** - Final Polish and Submission Readiness (not started)
 
 Current status is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

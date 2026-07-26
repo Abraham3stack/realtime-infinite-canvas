@@ -77,6 +77,9 @@ export const PresenceUpdatePayloadSchema = z.object({
 // presence:updated
 export const PresenceUpdatedPayloadSchema = z.object({
   participantId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  roomId: z.string().uuid(),
+  displayName: z.string().min(1),
   viewport: ViewportSchema.optional(),
   status: z.enum(['active', 'idle', 'disconnected']),
   serverTs: z.date(),

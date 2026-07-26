@@ -3,6 +3,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { registerRoomHandlers } from './handlers/room.js';
 import { registerObjectHandlers } from './handlers/objects.js';
 import { registerPhysicsHandlers } from './handlers/physics.js';
+import { registerPresenceHandlers } from './handlers/presence.js';
 
 /**
  * Attaches all Socket.IO middleware and domain handlers.
@@ -23,4 +24,7 @@ export function registerSocketHandlers(io: Server): void {
 
   // Register room-scoped physics state synchronization handlers.
   registerPhysicsHandlers(io);
+
+  // Register collaborator presence/radar viewport synchronization handlers.
+  registerPresenceHandlers(io);
 }
