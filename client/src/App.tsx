@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FC, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useConnectionStatus } from './hooks/useConnectionStatus.js';
 import { useCreateSession } from './hooks/useAuth.js';
 import { useCreateRoom, useJoinRoom, useLeaveRoom, useRoomAutoRejoin, useRoomUserJoined, useRoomUserLeft } from './hooks/useRoom.js';
@@ -154,6 +154,12 @@ const App: FC = () => {
     }
   };
 
+  const handleEnterSubmit = (event: ReactKeyboardEvent<HTMLInputElement>, action: () => void) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    action();
+  };
+
   const handleCreateRoom = async () => {
     try {
       setError(null);
@@ -294,7 +300,7 @@ const App: FC = () => {
                   <SkeletonBlock className="skeleton-line skeleton-participant" />
                 </div>
               ) : participants.length === 0 ? (
-                <p className="empty-state">Nobody has joined this room yet.</p>
+                <p className="empty-state">Nobody has joined this room yet. Share the room code to invite collaborators.</p>
               ) : (
                 <ul className="participant-list">
                   {participants.map((participant) => (
@@ -310,6 +316,16 @@ const App: FC = () => {
                   ))}
                 </ul>
               )}
+            </section>
+
+            <section className="info-card" aria-label="Keyboard shortcuts">
+              <p className="card-label">Keyboard Shortcuts</p>
+              <ul className="shortcut-list">
+                <li><span>R</span> Rectangle</li>
+                <li><span>C</span> Circle</li>
+                <li><span>T</span> Text</li>
+                <li><span>S</span> Sticky Note</li>
+              </ul>
             </section>
 
             <LoadingButton
@@ -355,14 +371,18 @@ const App: FC = () => {
               <section className="entry-section" aria-busy={sessionLoading}>
                 <h2>Create Guest Session</h2>
                 <div className="form-row">
+                  <label className="visually-hidden" htmlFor="display-name-input">Display name</label>
                   <input
+                    id="display-name-input"
                     type="text"
                     placeholder="Enter display name"
                     value={displayName}
                     onChange={(event) => setDisplayName(event.target.value)}
+                    onKeyDown={(event) => handleEnterSubmit(event, handleCreateSession)}
                     disabled={sessionLoading}
                     className="text-input"
                     aria-label="Display name"
+                    autoComplete="nickname"
                   />
                   <LoadingButton
                     type="button"
@@ -392,11 +412,14 @@ const App: FC = () => {
                 <section className="entry-section">
                   <h2>Create New Room</h2>
                   <div className="form-row">
+                    <label className="visually-hidden" htmlFor="room-title-input">Room title</label>
                     <input
+                      id="room-title-input"
                       type="text"
                       placeholder="Room title (optional)"
                       value={roomInput}
                       onChange={(event) => setRoomInput(event.target.value)}
+                      onKeyDown={(event) => handleEnterSubmit(event, handleCreateRoom)}
                       disabled={loadingAction === 'create-room'}
                       className="text-input"
                       aria-label="Room title"
@@ -416,15 +439,22 @@ const App: FC = () => {
 
                 <section className="entry-section">
                   <h2>Join Existing Room</h2>
+                  <p id="join-room-help" className="subtle-text">Paste either a full Room ID or a short Share Code.</p>
                   <div className="form-row">
+                    <label className="visually-hidden" htmlFor="room-join-input">Room ID or Share Code</label>
                     <input
+                      id="room-join-input"
                       type="text"
                       placeholder="Room ID or Share Code"
                       value={roomIdOrCode}
                       onChange={(event) => setRoomIdOrCode(event.target.value)}
+                      onKeyDown={(event) => handleEnterSubmit(event, handleJoinRoom)}
                       disabled={loadingAction === 'join-room'}
                       className="text-input"
                       aria-label="Room ID or share code"
+                      aria-describedby="join-room-help"
+                      autoCapitalize="off"
+                      autoCorrect="off"
                     />
                     <LoadingButton
                       type="button"

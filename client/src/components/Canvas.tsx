@@ -55,6 +55,8 @@ interface PresenceUpdatedPayload {
   serverTs: string;
 }
 
+type PresenceStatus = 'active' | 'idle';
+
 interface DragVelocitySample {
   startX: number;
   startY: number;
@@ -1062,23 +1064,24 @@ export const Canvas: React.FC<CanvasProps> = ({
     };
   }, [room, setRoomPhysics]);
 
+  const emitPresenceSnapshot = useCallback((status: PresenceStatus) => {
+    if (!room) return;
+    socket.emit('presence:update', {
+      roomId: room.id,
+      status,
+      viewport: {
+        x: offsetX,
+        y: offsetY,
+        zoom: scale,
+        width: stageSize.width,
+        height: stageSize.height,
+      },
+    });
+    presenceSyncRef.current.lastSentAt = Date.now();
+  }, [offsetX, offsetY, room, scale, stageSize.height, stageSize.width]);
+
   useEffect(() => {
     if (!room) return;
-
-    const emitPresence = () => {
-      socket.emit('presence:update', {
-        roomId: room.id,
-        status: 'active',
-        viewport: {
-          x: offsetX,
-          y: offsetY,
-          zoom: scale,
-          width: stageSize.width,
-          height: stageSize.height,
-        },
-      });
-      presenceSyncRef.current.lastSentAt = Date.now();
-    };
 
     const now = Date.now();
     const elapsed = now - presenceSyncRef.current.lastSentAt;
@@ -1089,17 +1092,30 @@ export const Canvas: React.FC<CanvasProps> = ({
         window.clearTimeout(presenceSyncRef.current.timer);
         presenceSyncRef.current.timer = null;
       }
-      emitPresence();
+      emitPresenceSnapshot('active');
       return;
     }
 
     if (presenceSyncRef.current.timer === null) {
       presenceSyncRef.current.timer = window.setTimeout(() => {
         presenceSyncRef.current.timer = null;
-        emitPresence();
+        emitPresenceSnapshot('active');
       }, remaining);
     }
-  }, [offsetX, offsetY, room, scale, stageSize.height, stageSize.width]);
+  }, [emitPresenceSnapshot, room]);
+
+  useEffect(() => {
+    if (!room) return;
+
+    const handleVisibilityChange = () => {
+      emitPresenceSnapshot(document.visibilityState === 'hidden' ? 'idle' : 'active');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [emitPresenceSnapshot, room]);
 
   // Update stage size on mount and resize
   useEffect(() => {
@@ -1374,6 +1390,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             className={roomPhysics.enabled ? 'tool-btn active' : 'tool-btn'}
             onClick={handleTogglePhysicsMode}
             aria-label="Toggle physics mode"
+            aria-pressed={roomPhysics.enabled}
             title="Physics mode"
           >
             <span aria-hidden="true">PHY</span>
@@ -1384,6 +1401,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             onClick={handleToggleSimulation}
             disabled={!roomPhysics.enabled}
             aria-label="Toggle physics simulation"
+            aria-pressed={roomPhysics.simulationRunning}
             title={roomPhysics.simulationRunning ? 'Pause simulation' : 'Resume simulation'}
           >
             <span aria-hidden="true">{roomPhysics.simulationRunning ? 'Pause' : 'Run'}</span>
@@ -1454,6 +1472,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             onClick={handleTogglePinned}
             disabled={!roomPhysics.enabled || !selectedObjectSupportsPhysics}
             aria-label="Toggle static object"
+            aria-pressed={selectedObjectIsPinned}
             title={selectedObjectIsPinned ? 'Unpin selected object' : 'Pin selected object'}
           >
             <span aria-hidden="true">{selectedObjectIsPinned ? 'Unpin' : 'Pin'}</span>

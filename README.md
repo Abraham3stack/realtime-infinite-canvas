@@ -250,7 +250,7 @@ Known limitations:
 
 - Radar tracks viewport positions for active participants only
 - Presence viewport persistence is best-effort and optimized for active session continuity
-- Offline sync remains the only pending Phase 5 scope
+- Offline sync remains intentionally deferred as a stretch goal outside final submission scope
 
 ## Current Feature List
 
@@ -272,6 +272,8 @@ Known limitations:
 - `C`: Create circle
 - `T`: Create text object
 - `S`: Create sticky note
+- `Arrow Keys` (while mini-map is focused): Nudge viewport from mini-map keyboard navigation
+- `Enter` in Create/Join form fields: Submit current action
 
 Shortcuts are ignored while typing in input or textarea fields.
 
@@ -290,7 +292,7 @@ Shortcuts are ignored while typing in input or textarea fields.
 - Physics simulation is limited to rectangle and circle objects
 - Physics authority is single-host (room creator)
 - Presence persistence is optimized for active sessions and is best-effort
-- Offline sync is not yet implemented (Phase 5 stretch scope)
+- Offline sync is intentionally deferred from Phase 6 submission readiness scope
 
 ## Technology Stack
 
@@ -355,7 +357,7 @@ Frontend React application with Vite build system.
 - **Phase 3** - Media Pipeline and Export Verification ✅
 - **Phase 4** - Performance Hardening for Judging Conditions ✅
 - **Phase 5** - Creative Features (physics + mini-map/radar complete; offline sync remaining)
-- **Phase 6** - Final Polish and Submission Readiness (not started)
+- **Phase 6** - Final Polish and Submission Readiness ✅
 
 Current status is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 

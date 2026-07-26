@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { CanvasObject } from '../store/objects.js';
 import type { RoomParticipant } from '../store/room.js';
 
@@ -32,6 +32,7 @@ interface WorldRect {
 const MINIMAP_WIDTH = 248;
 const MINIMAP_HEIGHT = 172;
 const MAP_PADDING = 14;
+const KEYBOARD_PAN_WORLD_UNITS = 220;
 
 function toWorldRect(viewportX: number, viewportY: number, zoom: number, viewportWidth: number, viewportHeight: number): WorldRect {
   const width = viewportWidth / zoom;
@@ -264,6 +265,29 @@ export const MiniMapRadar: React.FC<MiniMapRadarProps> = ({
     }
   };
 
+  const handleMapKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown' && event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return;
+    }
+
+    event.preventDefault();
+    const delta = KEYBOARD_PAN_WORLD_UNITS / Math.max(0.1, viewport.scale);
+    const worldXCenter = currentViewportRect.left + currentViewportRect.width / 2;
+    const worldYCenter = currentViewportRect.top + currentViewportRect.height / 2;
+
+    let nextWorldXCenter = worldXCenter;
+    let nextWorldYCenter = worldYCenter;
+
+    if (event.key === 'ArrowUp') nextWorldYCenter -= delta;
+    if (event.key === 'ArrowDown') nextWorldYCenter += delta;
+    if (event.key === 'ArrowLeft') nextWorldXCenter -= delta;
+    if (event.key === 'ArrowRight') nextWorldXCenter += delta;
+
+    const nextLeft = nextWorldXCenter - currentViewportRect.width / 2;
+    const nextTop = nextWorldYCenter - currentViewportRect.height / 2;
+    onSetPan(-nextLeft * viewport.scale, -nextTop * viewport.scale);
+  };
+
   return (
     <div className={collapsed ? 'minimap minimap--collapsed' : 'minimap'} data-testid="minimap-panel" aria-label="Mini-map and collaborator radar">
       <div className="minimap-header">
@@ -272,6 +296,7 @@ export const MiniMapRadar: React.FC<MiniMapRadarProps> = ({
           className="minimap-toggle"
           onClick={() => setCollapsed((current) => !current)}
           aria-label={collapsed ? 'Expand mini-map' : 'Collapse mini-map'}
+          aria-pressed={collapsed}
         >
           {collapsed ? 'Map' : 'Hide'}
         </button>
@@ -281,6 +306,7 @@ export const MiniMapRadar: React.FC<MiniMapRadarProps> = ({
             className="minimap-toggle"
             onClick={() => setShowLabels((current) => !current)}
             aria-label={showLabels ? 'Hide collaborator labels' : 'Show collaborator labels'}
+            aria-pressed={showLabels}
           >
             {showLabels ? 'Labels' : 'No labels'}
           </button>
@@ -291,11 +317,17 @@ export const MiniMapRadar: React.FC<MiniMapRadarProps> = ({
         <div
           className="minimap-canvas"
           data-testid="minimap-canvas"
+          role="application"
+          tabIndex={0}
+          aria-label="Mini-map navigator"
+          aria-describedby="minimap-keyboard-hint"
           onPointerDown={handleMapPointerDown}
           onPointerMove={handleMapPointerMove}
           onPointerUp={handleMapPointerUp}
           onPointerCancel={handleMapPointerUp}
+          onKeyDown={handleMapKeyDown}
         >
+          <p id="minimap-keyboard-hint" className="visually-hidden">Use arrow keys to nudge camera position. Click or drag inside the minimap to reposition the viewport.</p>
           <div className="minimap-world-plane" />
 
           {objectRects.map((entry) => (

@@ -1438,6 +1438,11 @@ Implement high-scoring creative features in strict priority order after MVP stab
 
 ## Phase 6 — Final Polish, Regression & Submission Readiness
 
+### Status
+
+- ✅ COMPLETE
+- ⏳ Offline Sync (Stretch Goal, intentionally deferred)
+
 ### Goal
 
 Deliver a polished, reliable submission with clear demo flow and no critical defects.
@@ -1448,6 +1453,45 @@ Deliver a polished, reliable submission with clear demo flow and no critical def
 - Final bug fixes and UX polish
 - Updated documentation and known limitations
 - Demo script and fallback scenarios
+
+### ✅ Completed
+
+- Accessibility and UX polish applied:
+  - Enter-to-submit support for guest/session and room join/create form flows
+  - Explicit screen-reader labels for form controls
+  - Keyboard-shortcut helper card in the room panel
+  - Mini-map keyboard navigation support (arrow-key panning with focusable control)
+  - Toggle controls now expose pressed state (`aria-pressed`) for assistive tech
+- Presence reliability polish applied:
+  - Presence updates now emit `idle` on document visibility loss and `active` when refocused
+  - Existing throttled presence pipeline retained for network efficiency
+- Responsive and focus-state polish applied:
+  - Screen-reader-only utility class and focus-visible styles expanded
+  - Mini-map focus styling improved for keyboard discoverability
+  - Small-screen minimap scaling/positioning tightened
+- Regression pass executed across automated gates and live browser smoke flows
+
+### 🧪 Validation Results
+
+- Automated quality gates: PASS
+  - `npm run typecheck` ✅
+  - `npm run lint` ✅
+  - `npm run build` ✅
+  - `npm test` ✅
+- Browser regression sweep: PASS (same-origin local environment)
+  - Guest session, room leave/join, and reconnect-adjacent rehydration behavior validated
+  - Object creation via keyboard shortcuts validated
+  - Physics mode toggle + simulation controls validated
+  - Mini-map visibility/labels controls and keyboard navigation validated
+  - Export PNG + JSON actions validated (JSON export toast observed)
+  - Two active browser pages remained synchronized on shared room state updates
+  - Targeted page-error/console-error probe returned zero errors during interaction sweep
+
+### 📝 Technical Debt
+
+- Add deterministic automated e2e for the full two-identity, two-browser matrix (including media upload with fixture assets)
+- Add CI-ready artifact capture for final submission rehearsal scenarios
+- Keep offline sync deferred unless time allows post-submission hardening
 
 ### Acceptance Criteria
 
