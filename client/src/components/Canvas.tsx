@@ -546,6 +546,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1);
   const [fieldMode, setFieldMode] = useState<FieldMode>(null);
+  const [isPhysicsControlsExpanded, setIsPhysicsControlsExpanded] = useState(false);
   
   // Viewport state: pan and zoom transforms
   const { offsetX, offsetY, scale, panBy, zoomBy, setPan } = useViewportStore((s) => ({
@@ -749,7 +750,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     setReplayError(null);
     setFieldMode(null);
     fieldActionRef.current = null;
+    setIsPhysicsControlsExpanded(false);
   }, [room?.id]);
+
+  useEffect(() => {
+    if (!roomPhysics.enabled || !roomPhysics.simulationRunning) {
+      setIsPhysicsControlsExpanded(false);
+    }
+  }, [roomPhysics.enabled, roomPhysics.simulationRunning]);
 
   const pinnedSet = useMemo(() => new Set(roomPhysics.staticObjectIds), [roomPhysics.staticObjectIds]);
   const physicsStructureSignature = useMemo(() => {
@@ -2168,281 +2176,317 @@ export const Canvas: React.FC<CanvasProps> = ({
   return (
     <div className="canvas-surface" role="region" aria-label="Infinite canvas workspace" aria-busy={loadingPhase !== null}>
       <div className="canvas-toolbar" role="toolbar" aria-label="Object creation toolbar">
-        <div className="tool-actions" aria-label="Shape tools">
-          {TOOLBAR_ITEMS.map((tool) => (
-            <button
-              key={tool.type}
-              type="button"
-              className={activeTool === tool.type ? 'tool-btn active' : 'tool-btn'}
-              onClick={() => createObjectAndSync(tool.type)}
-              disabled={isReplayMode}
-              title={`${tool.label} (${tool.hotkey})`}
-              aria-label={`${tool.label} (${tool.hotkey})`}
-            >
-              <span aria-hidden="true">{tool.icon}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => openUploadPicker('image')}
-            disabled={uploadInProgress || isReplayMode}
-            title="Upload Image"
-            aria-label="Upload image"
-          >
-            <span aria-hidden="true">IMG+</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => openUploadPicker('audio')}
-            disabled={uploadInProgress || isReplayMode}
-            title="Upload Audio"
-            aria-label="Upload audio"
-          >
-            <span aria-hidden="true">AUD+</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => openUploadPicker('video')}
-            disabled={uploadInProgress || isReplayMode}
-            title="Upload Video"
-            aria-label="Upload video"
-          >
-            <span aria-hidden="true">VID+</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={handleExportPng}
-            disabled={isReplayMode}
-            title="Export PNG"
-            aria-label="Export PNG"
-          >
-            <span aria-hidden="true">PNG</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={handleExportSvg}
-            disabled={isReplayMode}
-            title="Export SVG"
-            aria-label="Export SVG"
-          >
-            <span aria-hidden="true">SVG</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={handleExportJson}
-            disabled={isReplayMode}
-            title="Export JSON"
-            aria-label="Export JSON"
-          >
-            <span aria-hidden="true">JSON</span>
-          </button>
-          <button
-            type="button"
-            className={isReplayMode ? 'tool-btn active' : 'tool-btn'}
-            onClick={() => {
-              void handleReplayPanelToggle();
-            }}
-            title={isReplayMode ? 'Exit Replay Mode' : 'Open Replay Panel'}
-            aria-label={isReplayMode ? 'Exit replay mode' : 'Open replay panel'}
-          >
-            <span aria-hidden="true">RPL</span>
-          </button>
+        <div className="toolbar-strip toolbar-strip--objects" aria-label="Object tools group">
+          <div className="toolbar-group-card">
+            <div className="toolbar-group-head">
+              <span className="toolbar-group-title">Objects</span>
+              <span className="toolbar-group-hint">Create and export</span>
+            </div>
+            <div className="tool-actions" aria-label="Shape tools">
+              {TOOLBAR_ITEMS.map((tool) => (
+                <button
+                  key={tool.type}
+                  type="button"
+                  className={activeTool === tool.type ? 'tool-btn active' : 'tool-btn'}
+                  onClick={() => createObjectAndSync(tool.type)}
+                  disabled={isReplayMode}
+                  title={`${tool.label} (${tool.hotkey})`}
+                  aria-label={`${tool.label} (${tool.hotkey})`}
+                >
+                  <span aria-hidden="true">{tool.icon}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => openUploadPicker('image')}
+                disabled={uploadInProgress || isReplayMode}
+                title="Upload Image"
+                aria-label="Upload image"
+              >
+                <span aria-hidden="true">IMG+</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => openUploadPicker('audio')}
+                disabled={uploadInProgress || isReplayMode}
+                title="Upload Audio"
+                aria-label="Upload audio"
+              >
+                <span aria-hidden="true">AUD+</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => openUploadPicker('video')}
+                disabled={uploadInProgress || isReplayMode}
+                title="Upload Video"
+                aria-label="Upload video"
+              >
+                <span aria-hidden="true">VID+</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={handleExportPng}
+                disabled={isReplayMode}
+                title="Export PNG"
+                aria-label="Export PNG"
+              >
+                <span aria-hidden="true">PNG</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={handleExportSvg}
+                disabled={isReplayMode}
+                title="Export SVG"
+                aria-label="Export SVG"
+              >
+                <span aria-hidden="true">SVG</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={handleExportJson}
+                disabled={isReplayMode}
+                title="Export JSON"
+                aria-label="Export JSON"
+              >
+                <span aria-hidden="true">JSON</span>
+              </button>
+              <button
+                type="button"
+                className={isReplayMode ? 'tool-btn active' : 'tool-btn'}
+                onClick={() => {
+                  void handleReplayPanelToggle();
+                }}
+                title={isReplayMode ? 'Exit Replay Mode' : 'Open Replay Panel'}
+                aria-label={isReplayMode ? 'Exit replay mode' : 'Open replay panel'}
+              >
+                <span aria-hidden="true">RPL</span>
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="toolbar-meta">
-          <button
-            type="button"
-            className={roomPhysics.enabled ? 'tool-btn active' : 'tool-btn'}
-            onClick={handleTogglePhysicsMode}
-            disabled={isReplayMode}
-            aria-label="Toggle physics mode"
-            aria-pressed={roomPhysics.enabled}
-            title="Physics mode"
-          >
-            <span aria-hidden="true">PHY</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={handleToggleSimulation}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Toggle physics simulation"
-            aria-pressed={roomPhysics.simulationRunning}
-            title={roomPhysics.simulationRunning ? 'Pause simulation' : 'Resume simulation'}
-          >
-            <span aria-hidden="true">{roomPhysics.simulationRunning ? 'Pause' : 'Run'}</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => handleAdjustGravity(-0.1)}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Decrease gravity"
-            title="Decrease gravity"
-          >
-            <span aria-hidden="true">G-</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => handleAdjustGravity(0.1)}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Increase gravity"
-            title="Increase gravity"
-          >
-            <span aria-hidden="true">G+</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => handleAdjustRestitution(-0.05)}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Decrease restitution"
-            title="Decrease restitution"
-          >
-            <span aria-hidden="true">B-</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => handleAdjustRestitution(0.05)}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Increase restitution"
-            title="Increase restitution"
-          >
-            <span aria-hidden="true">B+</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => handleAdjustFrictionAir(-0.005)}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Decrease friction"
-            title="Decrease friction"
-          >
-            <span aria-hidden="true">F-</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={() => handleAdjustFrictionAir(0.005)}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Increase friction"
-            title="Increase friction"
-          >
-            <span aria-hidden="true">F+</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={handleTogglePinned}
-            disabled={!roomPhysics.enabled || !selectedObjectSupportsPhysics || isReplayMode}
-            aria-label="Toggle static object"
-            aria-pressed={selectedObjectIsPinned}
-            title={selectedObjectIsPinned ? 'Unpin selected object' : 'Pin selected object'}
-          >
-            <span aria-hidden="true">{selectedObjectIsPinned ? 'Unpin' : 'Pin'}</span>
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            onClick={handleResetPhysics}
-            disabled={!roomPhysics.enabled || isReplayMode}
-            aria-label="Reset physics simulation"
-            title="Reset physics simulation"
-          >
-            <span aria-hidden="true">Reset</span>
-          </button>
-          <button
-            type="button"
-            className={fieldMode === 'attract' ? 'tool-btn active' : 'tool-btn'}
-            onClick={() => handleToggleFieldMode('attract')}
-            disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
-            aria-label="Toggle attraction field"
-            aria-pressed={fieldMode === 'attract'}
-            title="Attract nearby physics objects"
-          >
-            <span aria-hidden="true">Attract</span>
-          </button>
-          <button
-            type="button"
-            className={fieldMode === 'repel' ? 'tool-btn active' : 'tool-btn'}
-            onClick={() => handleToggleFieldMode('repel')}
-            disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
-            aria-label="Toggle repulsion field"
-            aria-pressed={fieldMode === 'repel'}
-            title="Repel nearby physics objects"
-          >
-            <span aria-hidden="true">Repel</span>
-          </button>
-          <span className={loadingPhase ? 'users-chip users-chip--loading' : 'users-chip'} aria-label={`Users in room: ${participantCount}`}>
+
+        <div className="toolbar-strip toolbar-strip--physics" aria-label="Physics controls group">
+          <div className="toolbar-group-card">
+            <div className="toolbar-group-head">
+              <span className="toolbar-group-title">Physics</span>
+              <span className="toolbar-group-hint">Simulation controls</span>
+            </div>
+            <div className="physics-core-controls">
+              <button
+                type="button"
+                className={roomPhysics.enabled ? 'tool-btn active' : 'tool-btn'}
+                onClick={handleTogglePhysicsMode}
+                disabled={isReplayMode}
+                aria-label="Toggle physics mode"
+                aria-pressed={roomPhysics.enabled}
+                title="Physics mode"
+              >
+                <span aria-hidden="true">PHY</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={handleToggleSimulation}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Toggle physics simulation"
+                aria-pressed={roomPhysics.simulationRunning}
+                title={roomPhysics.simulationRunning ? 'Pause simulation' : 'Resume simulation'}
+              >
+                <span aria-hidden="true">{roomPhysics.simulationRunning ? 'Pause' : 'Run'}</span>
+              </button>
+              <button
+                type="button"
+                className={isPhysicsControlsExpanded ? 'tool-btn active toolbar-expand-toggle' : 'tool-btn toolbar-expand-toggle'}
+                onClick={() => setIsPhysicsControlsExpanded((current) => !current)}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Toggle advanced physics controls"
+                aria-pressed={isPhysicsControlsExpanded}
+                title="More physics controls"
+              >
+                <span aria-hidden="true">Phys+</span>
+              </button>
+            </div>
+
+            <div className={isPhysicsControlsExpanded ? 'physics-advanced-controls physics-advanced-controls--open' : 'physics-advanced-controls'}>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => handleAdjustGravity(-0.1)}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Decrease gravity"
+                title="Decrease gravity"
+              >
+                <span aria-hidden="true">G-</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => handleAdjustGravity(0.1)}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Increase gravity"
+                title="Increase gravity"
+              >
+                <span aria-hidden="true">G+</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => handleAdjustRestitution(-0.05)}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Decrease restitution"
+                title="Decrease restitution"
+              >
+                <span aria-hidden="true">B-</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => handleAdjustRestitution(0.05)}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Increase restitution"
+                title="Increase restitution"
+              >
+                <span aria-hidden="true">B+</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => handleAdjustFrictionAir(-0.005)}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Decrease friction"
+                title="Decrease friction"
+              >
+                <span aria-hidden="true">F-</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={() => handleAdjustFrictionAir(0.005)}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Increase friction"
+                title="Increase friction"
+              >
+                <span aria-hidden="true">F+</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={handleTogglePinned}
+                disabled={!roomPhysics.enabled || !selectedObjectSupportsPhysics || isReplayMode}
+                aria-label="Toggle static object"
+                aria-pressed={selectedObjectIsPinned}
+                title={selectedObjectIsPinned ? 'Unpin selected object' : 'Pin selected object'}
+              >
+                <span aria-hidden="true">{selectedObjectIsPinned ? 'Unpin' : 'Pin'}</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={handleResetPhysics}
+                disabled={!roomPhysics.enabled || isReplayMode}
+                aria-label="Reset physics simulation"
+                title="Reset physics simulation"
+              >
+                <span aria-hidden="true">Reset</span>
+              </button>
+              <button
+                type="button"
+                className={fieldMode === 'attract' ? 'tool-btn active' : 'tool-btn'}
+                onClick={() => handleToggleFieldMode('attract')}
+                disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
+                aria-label="Toggle attraction field"
+                aria-pressed={fieldMode === 'attract'}
+                title="Attract nearby physics objects"
+              >
+                <span aria-hidden="true">Attract</span>
+              </button>
+              <button
+                type="button"
+                className={fieldMode === 'repel' ? 'tool-btn active' : 'tool-btn'}
+                onClick={() => handleToggleFieldMode('repel')}
+                disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
+                aria-label="Toggle repulsion field"
+                aria-pressed={fieldMode === 'repel'}
+                title="Repel nearby physics objects"
+              >
+                <span aria-hidden="true">Repel</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="toolbar-strip toolbar-strip--session" aria-label="Session indicators group">
+          <div className="toolbar-meta">
+            <span className={loadingPhase ? 'users-chip users-chip--loading' : 'users-chip'} aria-label={`Users in room: ${participantCount}`}>
             {loadingPhase ? 'Syncing...' : `${participantCount} users`}
-          </span>
-          {!browserOnline ? (
-            <span className="users-chip users-chip--loading" aria-label="Offline mode status">
-              Offline{queuedOperationCount > 0 ? ` | ${queuedOperationCount} queued` : ''}
             </span>
-          ) : null}
-          {browserOnline && !socketConnected ? (
-            <span className="users-chip users-chip--loading" aria-label="Reconnecting status">
-              Reconnecting{queuedOperationCount > 0 ? ` | ${queuedOperationCount} queued` : ''}
-            </span>
-          ) : null}
-          {browserOnline && socketConnected && queuedOperationCount > 0 ? (
-            <span className={isReplayingQueue ? 'users-chip users-chip--loading' : 'users-chip'} aria-label="Queued operation status">
-              {isReplayingQueue ? `Syncing ${queuedOperationCount} queued` : `${queuedOperationCount} queued`}
-            </span>
-          ) : null}
-          {roomPhysics.enabled ? (
-            <span className="users-chip" aria-label="Physics status">
-              {isPhysicsAuthority ? 'Physics Host' : 'Physics Follower'} | g {roomPhysics.gravityY.toFixed(1)} | b {roomPhysics.restitution.toFixed(2)} | f {roomPhysics.frictionAir.toFixed(3)}
-            </span>
-          ) : null}
-          {fieldMode && roomPhysics.enabled ? (
-            <span className={fieldActionRef.current?.active ? 'users-chip users-chip--loading' : 'users-chip'} aria-label="Field interaction mode">
-              Field: {fieldMode === 'attract' ? 'Attract' : 'Repel'}
-            </span>
-          ) : null}
-          {isReplayMode ? (
-            <span className="users-chip users-chip--replay" aria-label="Replay mode enabled">
-              Replay Mode
-            </span>
-          ) : null}
-          {uploadInProgress && uploadLabel ? (
-            <span className="users-chip users-chip--loading" aria-label="Upload in progress">
-              {uploadLabel} {uploadProgress}%
-            </span>
-          ) : null}
-          {failedUpload ? (
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void runMediaUpload(failedUpload.mediaType, failedUpload.files);
-              }}
-              disabled={isReplayMode}
-              aria-label="Retry failed upload"
-              title={failedUpload.message}
-            >
-              Retry Upload
-            </button>
-          ) : null}
-          {selectedObjectId && !isReplayMode && (
-            <button
-              type="button"
-              className="delete-btn"
-              onClick={() => deleteObjectAndSync(selectedObjectId)}
-              aria-label="Delete selected object"
-              title="Delete selected object"
-            >
-              Delete
-            </button>
-          )}
+            {!browserOnline ? (
+              <span className="users-chip users-chip--loading" aria-label="Offline mode status">
+                Offline{queuedOperationCount > 0 ? ` | ${queuedOperationCount} queued` : ''}
+              </span>
+            ) : null}
+            {browserOnline && !socketConnected ? (
+              <span className="users-chip users-chip--loading" aria-label="Reconnecting status">
+                Reconnecting{queuedOperationCount > 0 ? ` | ${queuedOperationCount} queued` : ''}
+              </span>
+            ) : null}
+            {browserOnline && socketConnected && queuedOperationCount > 0 ? (
+              <span className={isReplayingQueue ? 'users-chip users-chip--loading' : 'users-chip'} aria-label="Queued operation status">
+                {isReplayingQueue ? `Syncing ${queuedOperationCount} queued` : `${queuedOperationCount} queued`}
+              </span>
+            ) : null}
+            {roomPhysics.enabled ? (
+              <span className="users-chip" aria-label="Physics status">
+                {isPhysicsAuthority ? 'Physics Host' : 'Physics Follower'} | g {roomPhysics.gravityY.toFixed(1)} | b {roomPhysics.restitution.toFixed(2)} | f {roomPhysics.frictionAir.toFixed(3)}
+              </span>
+            ) : null}
+            {fieldMode && roomPhysics.enabled ? (
+              <span className={fieldActionRef.current?.active ? 'users-chip users-chip--loading' : 'users-chip'} aria-label="Field interaction mode">
+                Field: {fieldMode === 'attract' ? 'Attract' : 'Repel'}
+              </span>
+            ) : null}
+            {isReplayMode ? (
+              <span className="users-chip users-chip--replay" aria-label="Replay mode enabled">
+                Replay Mode
+              </span>
+            ) : null}
+            {uploadInProgress && uploadLabel ? (
+              <span className="users-chip users-chip--loading" aria-label="Upload in progress">
+                {uploadLabel} {uploadProgress}%
+              </span>
+            ) : null}
+            {failedUpload ? (
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  void runMediaUpload(failedUpload.mediaType, failedUpload.files);
+                }}
+                disabled={isReplayMode}
+                aria-label="Retry failed upload"
+                title={failedUpload.message}
+              >
+                Retry Upload
+              </button>
+            ) : null}
+            {selectedObjectId && !isReplayMode && (
+              <button
+                type="button"
+                className="delete-btn"
+                onClick={() => deleteObjectAndSync(selectedObjectId)}
+                aria-label="Delete selected object"
+                title="Delete selected object"
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

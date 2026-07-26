@@ -47,6 +47,7 @@ const App: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<ActionLoading>(null);
   const [copyLoading, setCopyLoading] = useState<CopyLoading>(null);
+  const [isRoomPanelOpen, setIsRoomPanelOpen] = useState(false);
   const { toast, showToast } = useToast();
   const {
     phase: roomLoadingPhase,
@@ -100,6 +101,12 @@ const App: FC = () => {
     sessionLoading,
     showToast,
   ]);
+
+  useEffect(() => {
+    if (!room) {
+      setIsRoomPanelOpen(false);
+    }
+  }, [room]);
 
   const copyToClipboard = async (value: string, label: string, loadingKey: Exclude<CopyLoading, null>) => {
     try {
@@ -221,12 +228,49 @@ const App: FC = () => {
     <div className="app-shell">
       {room ? (
         <div className="room-layout">
-          <aside className="room-panel" aria-label="Room control panel">
+          <header className="mobile-room-header" aria-label="Mobile room navigation">
+            <button
+              type="button"
+              className={isRoomPanelOpen ? 'room-panel-toggle room-panel-toggle--active' : 'room-panel-toggle'}
+              onClick={() => setIsRoomPanelOpen((current) => !current)}
+              aria-label="Toggle room details"
+              aria-expanded={isRoomPanelOpen}
+              aria-controls="room-panel-drawer"
+            >
+              <span className="room-panel-toggle__icon" aria-hidden="true">☰</span>
+              <span>Room</span>
+              <span className={isRoomPanelOpen ? 'room-panel-toggle__chevron room-panel-toggle__chevron--open' : 'room-panel-toggle__chevron'} aria-hidden="true">▾</span>
+            </button>
+            <p className="mobile-room-header__title">Realtime Infinite Canvas</p>
+          </header>
+
+          {isRoomPanelOpen ? (
+            <button
+              type="button"
+              className="room-panel-backdrop"
+              aria-label="Close room details"
+              onClick={() => setIsRoomPanelOpen(false)}
+            />
+          ) : null}
+
+          <aside
+            id="room-panel-drawer"
+            className={isRoomPanelOpen ? 'room-panel room-panel--open' : 'room-panel'}
+            aria-label="Room control panel"
+          >
             <header className="panel-header">
               <div>
                 <p className="eyebrow">Realtime Infinite Canvas</p>
                 <h1 className="panel-title">Collaborative Session</h1>
               </div>
+              <button
+                type="button"
+                className="room-panel-close"
+                onClick={() => setIsRoomPanelOpen(false)}
+                aria-label="Close room details"
+              >
+                Close
+              </button>
               <span className="participant-badge" title="Active participants">
                 {connectedCount} active
               </span>
