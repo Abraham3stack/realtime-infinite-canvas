@@ -18,13 +18,17 @@ const HANDLE_SIZE = 10;
 const MIN_WIDTH = 80;
 const MIN_HEIGHT = 32;
 
-export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, draggable = true }) => {
+export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, onDragStart, onDragMove, draggable = true }) => {
   const textRef = useRef<Konva.Text>(null);
   const groupRef = useRef<Konva.Group>(null);
 
   const handleDragStart = useCallback(() => {
-    // Visual feedback
-  }, []);
+    onDragStart?.();
+  }, [onDragStart]);
+
+  const handleDragMove = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    onDragMove?.(e.target.x(), e.target.y());
+  }, [onDragMove]);
 
   const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     onMove(e.target.x(), e.target.y());
@@ -48,6 +52,7 @@ export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onRe
       y={object.y}
       draggable={draggable}
       onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >

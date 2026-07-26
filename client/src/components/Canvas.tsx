@@ -67,18 +67,19 @@ interface RoomEventsListResponsePayload {
 
 type PresenceStatus = 'active' | 'idle';
 
-interface DragVelocitySample {
-  startX: number;
-  startY: number;
-  startAt: number;
-  lastX: number;
-  lastY: number;
-  lastAt: number;
+interface DragPointerSample {
+  x: number;
+  y: number;
+  at: number;
+}
+
+interface DragMomentumState {
+  samples: DragPointerSample[];
 }
 
 type OperationResult = 'ack' | 'timeout';
 
-const PHYSICS_OBJECT_TYPES: CanvasObjectType[] = ['rectangle', 'circle'];
+const PHYSICS_OBJECT_TYPES: CanvasObjectType[] = ['rectangle', 'circle', 'text'];
 const PHYSICS_OBJECT_TYPE_SET = new Set<CanvasObjectType>(PHYSICS_OBJECT_TYPES);
 const DEFAULT_COLOR_BY_TYPE: Record<CanvasObjectType, string> = {
   rectangle: '#3498db',
@@ -91,11 +92,70 @@ const DEFAULT_COLOR_BY_TYPE: Record<CanvasObjectType, string> = {
 };
 const PHYSICS_SYNC_INTERVAL_MS = 80;
 const PHYSICS_DRAG_VELOCITY_MAX = 2.5;
+const PHYSICS_THROW_SAMPLE_LIMIT = 8;
+const PHYSICS_THROW_SAMPLE_WINDOW_MS = 160;
+const PHYSICS_THROW_MIN_MOVEMENT_PX = 4;
+const PHYSICS_THROW_MIN_SPEED = 0.05;
 const PRESENCE_SYNC_INTERVAL_MS = 120;
 const REPLAY_BASE_STEP_INTERVAL_MS = 250;
 
 function isPhysicsObjectType(type: CanvasObjectType): boolean {
   return PHYSICS_OBJECT_TYPE_SET.has(type);
+}
+
+function appendDragSample(samples: DragPointerSample[], sample: DragPointerSample): DragPointerSample[] {
+  const next = [...samples, sample];
+  if (next.length <= PHYSICS_THROW_SAMPLE_LIMIT) return next;
+  return next.slice(next.length - PHYSICS_THROW_SAMPLE_LIMIT);
+}
+
+function computeReleaseVelocity(samples: DragPointerSample[]): { x: number; y: number } | null {
+  if (samples.length < 2) return null;
+
+  const last = samples[samples.length - 1];
+  if (!last) return null;
+
+  const recent = samples.filter((sample) => last.at - sample.at <= PHYSICS_THROW_SAMPLE_WINDOW_MS);
+  const windowSamples = recent.length >= 2 ? recent : samples.slice(-2);
+  if (windowSamples.length < 2) return null;
+
+  let totalDx = 0;
+  let totalDy = 0;
+  let totalDt = 0;
+  let totalDistance = 0;
+
+  for (let index = 1; index < windowSamples.length; index += 1) {
+    const prev = windowSamples[index - 1];
+    const curr = windowSamples[index];
+    if (!prev || !curr) continue;
+
+    const dt = curr.at - prev.at;
+    if (dt <= 0) continue;
+
+    const dx = curr.x - prev.x;
+    const dy = curr.y - prev.y;
+    totalDx += dx;
+    totalDy += dy;
+    totalDt += dt;
+    totalDistance += Math.hypot(dx, dy);
+  }
+
+  if (totalDt <= 0 || totalDistance < PHYSICS_THROW_MIN_MOVEMENT_PX) return null;
+
+  const vx = (totalDx / totalDt) * 16.666;
+  const vy = (totalDy / totalDt) * 16.666;
+  const speed = Math.hypot(vx, vy);
+  if (speed < PHYSICS_THROW_MIN_SPEED) return null;
+
+  if (speed > PHYSICS_DRAG_VELOCITY_MAX) {
+    const scale = PHYSICS_DRAG_VELOCITY_MAX / speed;
+    return {
+      x: vx * scale,
+      y: vy * scale,
+    };
+  }
+
+  return { x: vx, y: vy };
 }
 
 const SVG_BACKGROUND_GRADIENT_ID = 'canvas-export-background-gradient';
@@ -528,7 +588,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const boundsRef = useRef<{ floorY: number; leftX: number; rightX: number } | null>(null);
   const resetSnapshotRef = useRef<Map<string, { x: number; y: number; rotation: number }>>(new Map());
   const lastSyncTsRef = useRef(0);
-  const dragVelocityRef = useRef<Map<string, DragVelocitySample>>(new Map());
+  const dragMomentumRef = useRef<Map<string, DragMomentumState>>(new Map());
   const roomPhysicsRef = useRef(roomPhysics);
   const pinnedSetRef = useRef<Set<string>>(new Set());
   const presenceSyncRef = useRef<{ lastSentAt: number; timer: number | null }>({
@@ -1124,6 +1184,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!existing) return;
 
     if (roomPhysics.enabled && isPhysicsObjectType(existing.type)) {
+      if (pinnedSetRef.current.has(objectId)) {
+        dragMomentumRef.current.delete(objectId);
+        return;
+      }
+
+      const moved = Math.abs(existing.x - x) >= 0.25 || Math.abs(existing.y - y) >= 0.25;
       const body = bodyMapRef.current.get(objectId);
       if (body) {
         Matter.Body.setPosition(body, {
@@ -1132,23 +1198,30 @@ export const Canvas: React.FC<CanvasProps> = ({
         });
       }
 
-      const velocity = dragVelocityRef.current.get(objectId);
-      if (body && velocity) {
-        const dtMs = Math.max(1, velocity.lastAt - velocity.startAt);
-        const vxPerMs = (velocity.lastX - velocity.startX) / dtMs;
-        const vyPerMs = (velocity.lastY - velocity.startY) / dtMs;
-        const fallbackVx = (x - existing.x) * 0.01;
-        const fallbackVy = (y - existing.y) * 0.01;
-        const mergedVx = Math.abs(vxPerMs * 16.666) > 0.05 ? vxPerMs * 16.666 : fallbackVx;
-        const mergedVy = Math.abs(vyPerMs * 16.666) > 0.05 ? vyPerMs * 16.666 : fallbackVy;
-        const vx = Math.max(-PHYSICS_DRAG_VELOCITY_MAX, Math.min(PHYSICS_DRAG_VELOCITY_MAX, mergedVx));
-        const vy = Math.max(-PHYSICS_DRAG_VELOCITY_MAX, Math.min(PHYSICS_DRAG_VELOCITY_MAX, mergedVy));
-        Matter.Body.setVelocity(body, { x: vx, y: vy });
+      const momentumState = dragMomentumRef.current.get(objectId);
+      const releaseVelocity = momentumState ? computeReleaseVelocity(momentumState.samples) : null;
+      if (body) {
+        if (releaseVelocity) {
+          Matter.Body.setVelocity(body, releaseVelocity);
+        } else {
+          Matter.Body.setVelocity(body, { x: 0, y: 0 });
+        }
       }
 
+      dragMomentumRef.current.delete(objectId);
       updateObject(objectId, { x, y });
 
-      if (!isPhysicsAuthority) {
+      if (releaseVelocity) {
+        emitUpdate(objectId, {
+          x,
+          y,
+          physicsVelocityX: releaseVelocity.x,
+          physicsVelocityY: releaseVelocity.y,
+        });
+        return;
+      }
+
+      if (!isPhysicsAuthority && moved) {
         emitUpdate(objectId, { x, y });
       }
 
@@ -1179,16 +1252,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
     if (!existing) return;
 
-    dragVelocityRef.current.set(objectId, {
-      startX: existing.x,
-      startY: existing.y,
-      startAt: performance.now(),
-      lastX: existing.x,
-      lastY: existing.y,
-      lastAt: performance.now(),
+    const now = performance.now();
+    dragMomentumRef.current.set(objectId, {
+      samples: [{ x: existing.x, y: existing.y, at: now }],
     });
 
     if (!roomPhysics.enabled || !isPhysicsObjectType(existing.type)) return;
+    if (pinnedSetRef.current.has(objectId)) return;
+
     const body = bodyMapRef.current.get(objectId);
     if (!body) return;
     Matter.Body.setStatic(body, false);
@@ -1199,29 +1270,20 @@ export const Canvas: React.FC<CanvasProps> = ({
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
     if (!existing) return;
 
-    const previous = dragVelocityRef.current.get(objectId);
     const now = performance.now();
+    const previous = dragMomentumRef.current.get(objectId);
     if (previous) {
-      dragVelocityRef.current.set(objectId, {
-        startX: previous.startX,
-        startY: previous.startY,
-        startAt: previous.startAt,
-        lastX: x,
-        lastY: y,
-        lastAt: now,
+      dragMomentumRef.current.set(objectId, {
+        samples: appendDragSample(previous.samples, { x, y, at: now }),
       });
     } else {
-      dragVelocityRef.current.set(objectId, {
-        startX: x,
-        startY: y,
-        startAt: now,
-        lastX: x,
-        lastY: y,
-        lastAt: now,
+      dragMomentumRef.current.set(objectId, {
+        samples: [{ x, y, at: now }],
       });
     }
 
     if (!roomPhysics.enabled || !isPhysicsObjectType(existing.type)) return;
+    if (pinnedSetRef.current.has(objectId)) return;
 
     const body = bodyMapRef.current.get(objectId);
     if (!body) return;
@@ -1615,11 +1677,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       const nextX = typeof updates.x === 'number' ? updates.x : current.x;
       const nextY = typeof updates.y === 'number' ? updates.y : current.y;
       const nextRotation = typeof updates.rotation === 'number' ? updates.rotation : current.rotation;
+      const nextVelocityX = typeof updates.physicsVelocityX === 'number' ? updates.physicsVelocityX : null;
+      const nextVelocityY = typeof updates.physicsVelocityY === 'number' ? updates.physicsVelocityY : null;
       Matter.Body.setPosition(body, {
         x: nextX + current.width / 2,
         y: nextY + current.height / 2,
       });
       Matter.Body.setAngle(body, nextRotation);
+
+      if (nextVelocityX !== null && nextVelocityY !== null && !pinnedSetRef.current.has(objectId)) {
+        Matter.Body.setStatic(body, false);
+        Matter.Body.setVelocity(body, { x: nextVelocityX, y: nextVelocityY });
+      }
     };
 
     // Listen for object deletion from other clients
@@ -2401,7 +2470,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               key={obj.id}
               object={obj}
               selected={selectedObjectId === obj.id}
-              draggable={isReplayMode ? false : !(roomPhysics.enabled && roomPhysics.simulationRunning && isPhysicsObjectType(obj.type) && pinnedSet.has(obj.id))}
+              draggable={isReplayMode ? false : !(roomPhysics.enabled && isPhysicsObjectType(obj.type) && pinnedSet.has(obj.id))}
               onDragStart={() => {
                 if (isReplayMode) return;
                 handleObjectDragStart(obj.id);

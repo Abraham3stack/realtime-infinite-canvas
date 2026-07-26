@@ -261,11 +261,22 @@ Physics-enabled object types:
 
 - Rectangle
 - Circle
+- Text
 
 Intentional limitations:
 
-- Text, sticky note, image, audio, and video objects are not simulated as dynamic Matter bodies
+- Sticky note, image, audio, and video objects are not simulated as dynamic Matter bodies
 - Physics controls are room-scoped and authority is single-host
+
+## Throw Physics (Momentum) (Phase 5.7)
+
+Throw momentum is implemented for physics-enabled drag interactions using recent pointer samples.
+
+- Release velocity uses a short rolling pointer history window, not just drag start/end deltas
+- Very small drags and near-zero release speeds are ignored to avoid accidental throws
+- Velocity is clamped to a safe maximum to keep simulation stable and predictable
+- Pinned objects cannot be thrown
+- Release velocity metadata is propagated through existing object update synchronization so remote collaborators observe the same throw direction and speed
 
 ## Mini-map & Collaborator Radar (Phase 5.2)
 

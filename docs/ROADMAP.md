@@ -1655,6 +1655,40 @@ Implement a replay user interface on top of the deterministic replay engine with
 - `npm run build` ✅
 - `npm test` ✅
 
+## Phase 5.7 - Throw Physics (Momentum)
+
+### Status
+
+- ✅ COMPLETE
+
+### Goal
+
+Implement predictable throw momentum for physics-enabled object drags without modifying replay architecture, offline sync architecture, or RoomEvent/collaboration architecture.
+
+### Completed
+
+- Added rolling pointer sample capture during drag for release velocity estimation
+- Replaced start/end delta momentum with recent-window velocity computation
+- Added throw guards for tiny movement and near-zero release speed
+- Added release velocity clamping to maintain simulation stability
+- Prevented pinned objects from entering throw path
+- Added velocity metadata propagation on object updates so remote clients apply matching launch velocity
+- Applied incoming velocity metadata to remote Matter bodies while respecting pinned/static constraints
+- Enabled text objects in the existing physics integration path and wired text drag callbacks into momentum sampling
+
+### Validation Results
+
+- `npm run typecheck` ✅
+- `npm run lint` ✅
+- `npm run build` ✅
+- `npm test` ✅
+- Single-client browser throw validation ✅
+  - Rectangle throw, circle throw, and text throw interactions exercised
+  - Pinned-object drag throw suppression exercised
+- Multiplayer browser throw synchronization validation ✅
+  - Host throw propagated to follower clients in the same room
+- Evidence bundle: `docs/validation/evidence/phase3_throw_physics_2026-07-26T14-55-00Z/`
+
 ---
 
 ## Scope Protection Rules
