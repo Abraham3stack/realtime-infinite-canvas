@@ -1356,21 +1356,27 @@ Implement high-scoring creative features in strict priority order after MVP stab
   - floor collision event
   - negative `velocity.y` after impact
 
-### ⚠️ Remaining Scope (Phase 5)
-
-- Offline sync stretch implementation (only if it does not regress core correctness)
-
 ### Status
 
 - ✅ Physics COMPLETE
 - ✅ Mini-map & Radar COMPLETE
-- ⏳ Offline Sync (Stretch Goal)
+- ✅ Offline Sync COMPLETE (Stretch)
 
 ### Acceptance Criteria
 
 - Physics interactions are demo-ready and stable
 - Mini-map/radar accurately reflects viewport and user location
-- Offline stretch only accepted if it does not degrade core realtime correctness
+- Offline queue replay preserves realtime correctness by using operationId echo confirmation before dequeue
+
+### Phase 5.3 Completion Summary (Offline Sync)
+
+- Added isolated client-side persistent queue for object operations (`create`, `update`, `delete`) with localStorage durability
+- Added offline-aware emit path: operations queue when disconnected/offline and replay automatically on reconnect
+- Added replay safety: FIFO processing with server-echo acknowledgement gates and timeout-based retention for retry
+- Added queue coalescing for repeated updates to the same object while offline to reduce replay pressure
+- Added explicit UX state chips for offline/reconnecting/syncing queued changes
+- Preserved existing realtime architecture and server socket contract (no backend protocol redesign)
+- Preserved media policy: uploads are online-only with explicit user feedback when offline
 
 ### Phase 5.2 Completion Summary (Mini-map & Radar)
 
@@ -1441,7 +1447,7 @@ Implement high-scoring creative features in strict priority order after MVP stab
 ### Status
 
 - ✅ COMPLETE
-- ⏳ Offline Sync (Stretch Goal, intentionally deferred)
+- ✅ COMPLETE (including post-phase offline sync stretch hardening)
 
 ### Goal
 
@@ -1491,7 +1497,7 @@ Deliver a polished, reliable submission with clear demo flow and no critical def
 
 - Add deterministic automated e2e for the full two-identity, two-browser matrix (including media upload with fixture assets)
 - Add CI-ready artifact capture for final submission rehearsal scenarios
-- Keep offline sync deferred unless time allows post-submission hardening
+- Add explicit conflict-resolution policy documentation for long offline sessions with heavy concurrent edits
 
 ### Acceptance Criteria
 
@@ -1532,8 +1538,8 @@ Deliver a polished, reliable submission with clear demo flow and no critical def
 ## Scope Protection Rules
 
 - Do not start stretch features before all mandatory MVP acceptance criteria pass.
-- Offline sync is stretch-only and can be dropped without harming MVP score.
-- If time pressure appears, drop features in this order: offline sync, export beyond JSON, advanced physics tuning.
+- Offline sync remains a stretch-class feature and may be simplified if correctness risks appear.
+- If time pressure appears, drop features in this order: advanced offline conflict UX, export beyond JSON, advanced physics tuning.
 
 ## Completion Definition
 

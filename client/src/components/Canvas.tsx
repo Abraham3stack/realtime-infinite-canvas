@@ -13,6 +13,7 @@ import type { CanvasObjectType } from '../store/objects.js';
 import { uploadMediaFiles, type MediaUploadType, type UploadedMedia } from '../hooks/useMediaUpload.js';
 import { canvasCenterToWorld, clientToCanvasPoint } from '../utils/coordinates.js';
 import { type RoomPhysicsState, usePhysicsStore } from '../store/physics.js';
+import { getOfflineOperationsQueue, type OfflineOperation } from '../utils/offlineQueue.js';
 
 // Type definitions for socket payloads
 interface ObjectCreatedPayload {
@@ -65,6 +66,8 @@ interface DragVelocitySample {
   lastY: number;
   lastAt: number;
 }
+
+type OperationResult = 'ack' | 'timeout';
 
 const PHYSICS_OBJECT_TYPES: CanvasObjectType[] = ['rectangle', 'circle'];
 const PHYSICS_OBJECT_TYPE_SET = new Set<CanvasObjectType>(PHYSICS_OBJECT_TYPES);
@@ -156,6 +159,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const [failedUpload, setFailedUpload] = useState<{ files: File[]; mediaType: MediaUploadType; message: string } | null>(null);
+  const [socketConnected, setSocketConnected] = useState(socket.connected);
+  const [browserOnline, setBrowserOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [queuedOperationCount, setQueuedOperationCount] = useState(0);
+  const [isReplayingQueue, setIsReplayingQueue] = useState(false);
   
   // Viewport state: pan and zoom transforms
   const { offsetX, offsetY, scale, panBy, zoomBy, setPan } = useViewportStore((s) => ({
@@ -184,6 +191,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   // This prevents duplicate application of local writes while preserving all
   // remote participant updates.
   const pendingOperations = useRef<Set<string>>(new Set());
+  const pendingOperationResolvers = useRef<Map<string, (result: OperationResult) => void>>(new Map());
   const panRafRef = useRef<number | null>(null);
   const pendingPanRef = useRef({ dx: 0, dy: 0 });
   const zoomRafRef = useRef<number | null>(null);
@@ -202,6 +210,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     lastSentAt: 0,
     timer: null,
   });
+  const isReplayingQueueRef = useRef(false);
+  const queueReplayTimerRef = useRef<number | null>(null);
+  const offlineQueue = useMemo(() => getOfflineOperationsQueue(), []);
+
+  const canSendRealtimeOperation = Boolean(room && socketConnected && browserOnline);
 
   const isPhysicsAuthority = useMemo(() => {
     if (!room?.createdBySessionId || !sessionId) return false;
@@ -234,8 +247,107 @@ export const Canvas: React.FC<CanvasProps> = ({
     return `op_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }, []);
 
+  const refreshQueueCount = useCallback(() => {
+    if (!room) {
+      setQueuedOperationCount(0);
+      return;
+    }
+
+    setQueuedOperationCount(offlineQueue.size(room.id, sessionId));
+  }, [offlineQueue, room, sessionId]);
+
+  const waitForOperationAck = useCallback((operationId: string, timeoutMs: number): Promise<OperationResult> => {
+    return new Promise((resolve) => {
+      const timeoutId = window.setTimeout(() => {
+        pendingOperationResolvers.current.delete(operationId);
+        resolve('timeout');
+      }, timeoutMs);
+
+      pendingOperationResolvers.current.set(operationId, (result) => {
+        window.clearTimeout(timeoutId);
+        pendingOperationResolvers.current.delete(operationId);
+        resolve(result);
+      });
+    });
+  }, []);
+
+  const emitQueuedOperation = useCallback((entry: OfflineOperation) => {
+    pendingOperations.current.add(entry.operationId);
+
+    if (entry.type === 'create') {
+      socket.emit('object:create', {
+        operationId: entry.operationId,
+        roomId: entry.roomId,
+        object: entry.object,
+      });
+      return;
+    }
+
+    if (entry.type === 'update') {
+      socket.emit('object:update', {
+        operationId: entry.operationId,
+        roomId: entry.roomId,
+        objectId: entry.objectId,
+        updates: entry.updates,
+      });
+      return;
+    }
+
+    socket.emit('object:delete', {
+      operationId: entry.operationId,
+      roomId: entry.roomId,
+      objectId: entry.objectId,
+    });
+  }, []);
+
+  const enqueueCreate = useCallback((object: CanvasObject) => {
+    if (!room) return;
+
+    const operationId = generateOperationId();
+    offlineQueue.enqueueCreate({
+      operationId,
+      roomId: room.id,
+      sessionId,
+      object: object as unknown as Record<string, unknown>,
+    });
+    refreshQueueCount();
+  }, [generateOperationId, offlineQueue, refreshQueueCount, room, sessionId]);
+
+  const enqueueUpdate = useCallback((objectId: string, updates: Record<string, unknown>) => {
+    if (!room) return;
+
+    const operationId = generateOperationId();
+    offlineQueue.enqueueUpdate({
+      operationId,
+      roomId: room.id,
+      sessionId,
+      objectId,
+      updates,
+    });
+    refreshQueueCount();
+  }, [generateOperationId, offlineQueue, refreshQueueCount, room, sessionId]);
+
+  const enqueueDelete = useCallback((objectId: string) => {
+    if (!room) return;
+
+    const operationId = generateOperationId();
+    offlineQueue.enqueueDelete({
+      operationId,
+      roomId: room.id,
+      sessionId,
+      objectId,
+    });
+    refreshQueueCount();
+  }, [generateOperationId, offlineQueue, refreshQueueCount, room, sessionId]);
+
   const emitCreate = useCallback((object: CanvasObject) => {
     if (!room) return;
+
+    if (!canSendRealtimeOperation) {
+      enqueueCreate(object);
+      return;
+    }
+
     const operationId = generateOperationId();
     pendingOperations.current.add(operationId);
     socket.emit('object:create', {
@@ -243,10 +355,16 @@ export const Canvas: React.FC<CanvasProps> = ({
       roomId: room.id,
       object,
     });
-  }, [generateOperationId, room]);
+  }, [canSendRealtimeOperation, enqueueCreate, generateOperationId, room]);
 
   const emitUpdate = useCallback((objectId: string, updates: Record<string, unknown>) => {
     if (!room) return;
+
+    if (!canSendRealtimeOperation) {
+      enqueueUpdate(objectId, updates);
+      return;
+    }
+
     const operationId = generateOperationId();
     pendingOperations.current.add(operationId);
     socket.emit('object:update', {
@@ -255,10 +373,16 @@ export const Canvas: React.FC<CanvasProps> = ({
       objectId,
       updates,
     });
-  }, [generateOperationId, room]);
+  }, [canSendRealtimeOperation, enqueueUpdate, generateOperationId, room]);
 
   const emitDelete = useCallback((objectId: string) => {
     if (!room) return;
+
+    if (!canSendRealtimeOperation) {
+      enqueueDelete(objectId);
+      return;
+    }
+
     const operationId = generateOperationId();
     pendingOperations.current.add(operationId);
     socket.emit('object:delete', {
@@ -266,7 +390,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       roomId: room.id,
       objectId,
     });
-  }, [generateOperationId, room]);
+  }, [canSendRealtimeOperation, enqueueDelete, generateOperationId, room]);
 
   const emitPhysicsStatePatch = useCallback((patch: Partial<RoomPhysicsState>) => {
     if (!room) return;
@@ -363,6 +487,11 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
+    if (!browserOnline || !socketConnected) {
+      onNotify?.('Media uploads require an active online connection.');
+      return;
+    }
+
     if (files.length === 0) {
       return;
     }
@@ -391,7 +520,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       setUploadLabel(null);
       setUploadProgress(0);
     }
-  }, [createMediaObjectsAndSync, onNotify, room, sessionToken, uploadInProgress]);
+  }, [browserOnline, createMediaObjectsAndSync, onNotify, room, sessionToken, socketConnected, uploadInProgress]);
 
   const openUploadPicker = useCallback((mediaType: MediaUploadType) => {
     if (uploadInProgress) return;
@@ -972,6 +1101,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       // Skip if this is our own operation (echo)
       if (pendingOperations.current.has(operationId)) {
         pendingOperations.current.delete(operationId);
+        pendingOperationResolvers.current.get(operationId)?.('ack');
         // Reconcile optimistic local object with server-canonical fields
         // (timestamps/media normalization) so export matches persisted state.
         updateObject(object.id, object);
@@ -989,6 +1119,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       // Skip if this is our own operation (echo)
       if (pendingOperations.current.has(operationId)) {
         pendingOperations.current.delete(operationId);
+        pendingOperationResolvers.current.get(operationId)?.('ack');
         return;
       }
 
@@ -1015,6 +1146,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       // Skip if this is our own operation (echo)
       if (pendingOperations.current.has(operationId)) {
         pendingOperations.current.delete(operationId);
+        pendingOperationResolvers.current.get(operationId)?.('ack');
         return;
       }
 
@@ -1032,6 +1164,89 @@ export const Canvas: React.FC<CanvasProps> = ({
       socket.off('object:deleted', handleObjectDeleted);
     };
   }, [deleteObject, room, updateObject]);
+
+  useEffect(() => {
+    const handleConnect = () => setSocketConnected(true);
+    const handleDisconnect = () => setSocketConnected(false);
+    const handleOnline = () => setBrowserOnline(true);
+    const handleOffline = () => setBrowserOnline(false);
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    refreshQueueCount();
+  }, [refreshQueueCount]);
+
+  const replayOfflineQueue = useCallback(async () => {
+    if (!room || !socketConnected || !browserOnline) return;
+    if (isReplayingQueueRef.current) return;
+
+    const queued = offlineQueue.list(room.id, sessionId);
+    if (queued.length === 0) return;
+
+    isReplayingQueueRef.current = true;
+    setIsReplayingQueue(true);
+
+    let syncedCount = 0;
+    let blockedByTimeout = false;
+
+    for (const entry of queued) {
+      if (!socketConnected || !browserOnline) {
+        blockedByTimeout = true;
+        break;
+      }
+
+      emitQueuedOperation(entry);
+      const result = await waitForOperationAck(entry.operationId, 2500);
+      if (result !== 'ack') {
+        pendingOperations.current.delete(entry.operationId);
+        offlineQueue.markAttempt(entry.id, 'Timed out waiting for server echo');
+        blockedByTimeout = true;
+        break;
+      }
+
+      offlineQueue.remove(entry.id);
+      syncedCount += 1;
+      refreshQueueCount();
+    }
+
+    setIsReplayingQueue(false);
+    isReplayingQueueRef.current = false;
+
+    refreshQueueCount();
+
+    if (syncedCount > 0) {
+      onNotify?.(`Synced ${syncedCount} queued change${syncedCount > 1 ? 's' : ''}.`);
+    }
+
+    if (blockedByTimeout) {
+      onNotify?.('Some queued changes could not be confirmed yet and will retry automatically.');
+    }
+  }, [browserOnline, emitQueuedOperation, offlineQueue, onNotify, refreshQueueCount, room, sessionId, socketConnected, waitForOperationAck]);
+
+  useEffect(() => {
+    if (!room || !socketConnected || !browserOnline) return;
+    if (queueReplayTimerRef.current !== null) {
+      window.clearTimeout(queueReplayTimerRef.current);
+    }
+
+    // Allow room rejoin hydration to settle before replaying queued mutations.
+    queueReplayTimerRef.current = window.setTimeout(() => {
+      queueReplayTimerRef.current = null;
+      void replayOfflineQueue();
+    }, 350);
+  }, [browserOnline, replayOfflineQueue, room, socketConnected]);
 
   useEffect(() => {
     if (!room) return;
@@ -1262,6 +1477,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (presenceSyncRef.current.timer !== null) {
         window.clearTimeout(presenceSyncRef.current.timer);
       }
+      if (queueReplayTimerRef.current !== null) {
+        window.clearTimeout(queueReplayTimerRef.current);
+      }
       clearMatterRuntime();
     };
   }, [clearMatterRuntime]);
@@ -1490,6 +1708,21 @@ export const Canvas: React.FC<CanvasProps> = ({
           <span className={loadingPhase ? 'users-chip users-chip--loading' : 'users-chip'} aria-label={`Users in room: ${participantCount}`}>
             {loadingPhase ? 'Syncing...' : `${participantCount} users`}
           </span>
+          {!browserOnline ? (
+            <span className="users-chip users-chip--loading" aria-label="Offline mode status">
+              Offline{queuedOperationCount > 0 ? ` | ${queuedOperationCount} queued` : ''}
+            </span>
+          ) : null}
+          {browserOnline && !socketConnected ? (
+            <span className="users-chip users-chip--loading" aria-label="Reconnecting status">
+              Reconnecting{queuedOperationCount > 0 ? ` | ${queuedOperationCount} queued` : ''}
+            </span>
+          ) : null}
+          {browserOnline && socketConnected && queuedOperationCount > 0 ? (
+            <span className={isReplayingQueue ? 'users-chip users-chip--loading' : 'users-chip'} aria-label="Queued operation status">
+              {isReplayingQueue ? `Syncing ${queuedOperationCount} queued` : `${queuedOperationCount} queued`}
+            </span>
+          ) : null}
           {roomPhysics.enabled ? (
             <span className="users-chip" aria-label="Physics status">
               {isPhysicsAuthority ? 'Physics Host' : 'Physics Follower'} | g {roomPhysics.gravityY.toFixed(1)} | b {roomPhysics.restitution.toFixed(2)} | f {roomPhysics.frictionAir.toFixed(3)}

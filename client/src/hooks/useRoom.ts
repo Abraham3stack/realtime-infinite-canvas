@@ -5,6 +5,7 @@ import { useRoomStore } from '../store/room.js';
 import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
 import { clearPersistedRoom, writePersistedRoom } from '../utils/persistence.js';
 import { DEFAULT_ROOM_PHYSICS_STATE, type RoomPhysicsState, usePhysicsStore } from '../store/physics.js';
+import { getOfflineOperationsQueue } from '../utils/offlineQueue.js';
 
 interface RoomCreateResponse {
   code?: string;
@@ -182,8 +183,11 @@ export function useLeaveRoom() {
   const clearRoom = useRoomStore(useShallow((s) => s.clearRoom));
   const clearObjects = useCanvasObjectsStore(useShallow((s) => s.clear));
   const clearRoomPhysics = usePhysicsStore(useShallow((s) => s.clearRoomPhysics));
+  const offlineQueue = getOfflineOperationsQueue();
 
   const leaveRoom = useCallback(async (): Promise<void> => {
+    const currentRoomId = useRoomStore.getState().room?.id;
+
     return new Promise((resolve, reject) => {
       socket.emit('room:leave', {}, (response: RoomLeaveResponse) => {
         if (!response.success) {
@@ -194,10 +198,13 @@ export function useLeaveRoom() {
         clearObjects();
         clearRoomPhysics();
         clearPersistedRoom();
+        if (currentRoomId) {
+          offlineQueue.clearForRoom(currentRoomId);
+        }
         resolve();
       });
     });
-  }, [clearRoom, clearObjects, clearRoomPhysics]);
+  }, [clearRoom, clearObjects, clearRoomPhysics, offlineQueue]);
 
   return leaveRoom;
 }

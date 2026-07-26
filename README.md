@@ -250,7 +250,7 @@ Known limitations:
 
 - Radar tracks viewport positions for active participants only
 - Presence viewport persistence is best-effort and optimized for active session continuity
-- Offline sync remains intentionally deferred as a stretch goal outside final submission scope
+- Offline queue replay is best-effort and waits for server echo confirmation before dequeuing
 
 ## Current Feature List
 
@@ -265,6 +265,7 @@ Known limitations:
 - Collaborator radar with presence-synchronized viewport rectangles
 - Late-join room hydration for objects, participants, physics state, and presence-derived viewport metadata
 - Reconnect behavior that restores room state from snapshot and resumes live synchronization
+- Offline operation queue for object create/update/delete with automatic reconnect replay
 
 ## Keyboard Shortcuts
 
@@ -286,13 +287,14 @@ Shortcuts are ignored while typing in input or textarea fields.
 - Presence synchronization: collaborator viewport/status updates over room-scoped presence events
 - Persistence and hydration: room/object/participant snapshot bootstrap + realtime stream convergence
 - Reconnect strategy: snapshot re-hydration followed by incremental event replay/consumption
+- Offline sync strategy: local optimistic mutations + persistent FIFO queue + reconnect replay
 
 ## Known Limitations
 
 - Physics simulation is limited to rectangle and circle objects
 - Physics authority is single-host (room creator)
 - Presence persistence is optimized for active sessions and is best-effort
-- Offline sync is intentionally deferred from Phase 6 submission readiness scope
+- Offline queue currently stores object create/update/delete only (media uploads remain online-only)
 
 ## Technology Stack
 
@@ -356,7 +358,7 @@ Frontend React application with Vite build system.
 - **Phase 2** - Infinite Canvas and Mandatory Object Types ✅
 - **Phase 3** - Media Pipeline and Export Verification ✅
 - **Phase 4** - Performance Hardening for Judging Conditions ✅
-- **Phase 5** - Creative Features (physics + mini-map/radar complete; offline sync remaining)
+- **Phase 5** - Creative Features (physics + mini-map/radar + offline sync) ✅
 - **Phase 6** - Final Polish and Submission Readiness ✅
 
 Current status is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
