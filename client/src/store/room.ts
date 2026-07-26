@@ -25,6 +25,12 @@ export interface RoomState {
   clearRoom: () => void;
 }
 
+/**
+ * Room-scoped collaboration state.
+ *
+ * Participant updates are idempotent by `id` so duplicate join/refresh events
+ * converge to a single participant record instead of accumulating duplicates.
+ */
 export const useRoomStore = create<RoomState>((set) => ({
   room: null,
   participants: [],

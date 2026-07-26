@@ -53,6 +53,13 @@ interface ClientCanvasObject {
   updatedAt?: string;
 }
 
+/**
+ * Lightweight runtime guard for socket payloads.
+ *
+ * This intentionally checks only synchronization-critical fields; deeper schema
+ * validation is handled elsewhere in the stack and would add avoidable latency
+ * on high-frequency realtime paths.
+ */
 function isClientCanvasObject(value: Record<string, unknown>): value is ClientCanvasObject {
   return (
     typeof value.id === 'string' &&
@@ -209,6 +216,12 @@ function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
   }
 }
 
+/**
+ * Maps client object representation into Prisma create input.
+ *
+ * The mapping keeps a compatibility bridge between UI-facing object types
+ * (`rectangle`, `sticky-note`) and historical DB discriminators (`shape`, `sticky`).
+ */
 function toCreateData(roomId: string, sessionId: string, object: ClientCanvasObject): Prisma.CanvasObjectUncheckedCreateInput {
   const common = {
     id: object.id,
@@ -352,6 +365,12 @@ function buildUpdateData(existing: PrismaCanvasObject, updates: Record<string, u
   return data;
 }
 
+/**
+ * Detects whether an update would materially change persisted state.
+ *
+ * This prevents no-op writes under noisy drag/resize streams where duplicate
+ * positions are common, reducing DB contention and unnecessary room broadcasts.
+ */
 function hasEffectiveUpdate(
   existing: PrismaCanvasObject,
   data: Prisma.CanvasObjectUpdateInput
@@ -424,6 +443,12 @@ const prismaObjectRepository: ObjectRepository = {
   },
 };
 
+/**
+ * In-memory repository used by tests and isolated harness scenarios.
+ *
+ * Behavior mirrors ordering and field updates from the Prisma repository so
+ * synchronization semantics can be validated without a live database.
+ */
 export function createInMemoryObjectRepository(): ObjectRepository {
   const roomMap = new Map<string, Map<string, PrismaCanvasObject>>();
 
@@ -550,6 +575,11 @@ export async function getRoomObjects(roomId: string): Promise<Record<string, unk
   return getRoomObjectsFromRepository(prismaObjectRepository, roomId);
 }
 
+/**
+ * Returns room objects transformed into client payload shape.
+ * Nulls from unsupported legacy DB variants are dropped to keep wire payloads
+ * canonical for current clients.
+ */
 export async function getRoomObjectsFromRepository(
   repository: ObjectRepository,
   roomId: string
@@ -565,6 +595,13 @@ export function registerObjectHandlers(io: Server): void {
   registerObjectHandlersWithRepository(io, prismaObjectRepository);
 }
 
+/**
+ * Registers object lifecycle socket handlers for a repository implementation.
+ *
+ * The injected repository keeps transport logic decoupled from storage concerns,
+ * which makes behavior testing deterministic and allows backend evolution without
+ * touching event contracts.
+ */
 export function registerObjectHandlersWithRepository(io: Server, repository: ObjectRepository): void {
   io.on('connection', (socket: Socket) => {
     const authSocket = socket as AuthenticatedSocket;
@@ -626,7 +663,8 @@ export function registerObjectHandlersWithRepository(io: Server, repository: Obj
       }
     });
 
-    // object:update — Client moves or modifies an object
+    // object:update — Client moves or modifies an object.
+    // Persist only effective changes and broadcast only when state transitions.
     socket.on('object:update', async (payload: ObjectUpdatePayload) => {
       const { operationId, roomId, objectId, updates } = payload;
 

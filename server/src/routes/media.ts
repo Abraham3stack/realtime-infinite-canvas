@@ -59,6 +59,11 @@ const upload = multer({
   },
 });
 
+/**
+ * Uniform API error shape for media endpoints.
+ * Keeping this centralized prevents transport-level inconsistency across
+ * validation, Cloudinary, and multer failure paths.
+ */
 function sendError(
   res: Response,
   status: number,
@@ -83,6 +88,11 @@ function assertSupportedMimeType(mimeType: string): MediaResourceType {
   throw new Error(`Unsupported media MIME type: ${mimeType}`);
 }
 
+/**
+ * Validates user-provided file metadata before network upload.
+ * This intentionally fails fast to avoid wasting Cloudinary quota and latency
+ * on files that can never be accepted.
+ */
 function validateFile(file: Express.Multer.File, expectedType?: MediaResourceType) {
   const detectedType = assertSupportedMimeType(file.mimetype);
   if (expectedType && detectedType !== expectedType) {
@@ -173,6 +183,8 @@ router.post('/upload', (req, res) => {
       const isOversize = typeof err.message === 'string' && err.message.includes('exceeds max size');
       const isConfigError = err.code === ErrorCodes.MEDIA_VALIDATION_FAILED && err.message?.startsWith('Missing Cloudinary environment variables');
 
+      // Error mapping keeps client UX actionable: user-fixable payload issues are
+      // 4xx, upstream Cloudinary failures are surfaced as 502.
       const status = isConfigError ? 500 : (isUnsupportedMime || isTypeMismatch || isOversize ? 400 : 502);
       const code = isUnsupportedMime || isTypeMismatch || isOversize || isConfigError
         ? ErrorCodes.MEDIA_VALIDATION_FAILED

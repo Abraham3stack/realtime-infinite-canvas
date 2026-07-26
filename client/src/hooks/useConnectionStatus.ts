@@ -9,6 +9,13 @@ export interface ServerHelloPayload {
   message: string;
 }
 
+/**
+ * Tracks socket lifecycle state for UI feedback and reconnect signaling.
+ *
+ * The hook intentionally manages human-readable labels separately from transport
+ * state so UX can briefly communicate transitions like "Reconnected" without
+ * mutating core connection semantics.
+ */
 export function useConnectionStatus() {
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [serverHello, setServerHello] = useState<ServerHelloPayload | null>(null);

@@ -26,6 +26,15 @@ interface RoomJoinPayload {
   shareCode?: string;
 }
 
+/**
+ * Registers room lifecycle handlers (create/join/leave/disconnect cleanup).
+ *
+ * Architectural assumptions:
+ * - Room membership is application state layered on top of socket connectivity.
+ * - Join responses provide full participant/object snapshots so clients can
+ *   converge even after reconnects or missed transient events.
+ * - Participant writes are idempotent where possible to tolerate client retries.
+ */
 export function registerRoomHandlers(io: Server): void {
   io.on('connection', (socket: Socket) => {
     console.log(`[socket] connected  id=${socket.id}`);
@@ -179,6 +188,8 @@ export function registerRoomHandlers(io: Server): void {
         });
 
         // Fetch all current participants in the room for the state snapshot.
+        // Snapshot-first join avoids clients rendering partial room state based
+        // only on incremental userJoined events.
         const participants = await prisma.roomParticipant.findMany({
           where: { roomId: room.id, isActive: true },
           include: { session: { include: { user: true } } },
@@ -197,7 +208,8 @@ export function registerRoomHandlers(io: Server): void {
           isActive: p.isActive,
         }));
 
-        // Send the state snapshot directly to the joining socket.
+        // Send the state snapshot directly to the joining socket. This is the
+        // source of truth used to repair divergence after reconnect/offline gaps.
         const canvasObjects = await getRoomObjects(room.id);
 
         callback({

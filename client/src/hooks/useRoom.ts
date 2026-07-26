@@ -38,9 +38,13 @@ interface UserLeftPayload {
   serverTs: string;
 }
 
-// Hook to create a new room.
-// Returns a function that accepts a room title and returns a promise
-// resolving to the room creation response or error.
+/**
+ * Creates a room on the server and seeds local room/participant state from the
+ * authoritative callback payload.
+ *
+ * The hook writes server-derived data (instead of local guesses) so all clients
+ * start from the same baseline identifiers and participant metadata.
+ */
 export function useCreateRoom() {
   const setRoom = useRoomStore(useShallow((s) => s.setRoom));
   const setParticipants = useRoomStore(useShallow((s) => s.setParticipants));
@@ -79,9 +83,13 @@ export function useCreateRoom() {
   return createRoom;
 }
 
-// Hook to join an existing room.
-// Returns a function that accepts roomId or shareCode and returns a promise
-// resolving when join is complete or rejecting on error.
+/**
+ * Joins an existing room by id or share code and hydrates both participant and
+ * canvas-object state from the server snapshot.
+ *
+ * Hydration overwrites local object state by design because reconnect/join should
+ * converge to server truth after transient disconnects or tab restores.
+ */
 export function useJoinRoom() {
   const setRoom = useRoomStore(useShallow((s) => s.setRoom));
   const setParticipants = useRoomStore(useShallow((s) => s.setParticipants));
@@ -111,7 +119,8 @@ export function useJoinRoom() {
             isActive: p.isActive as boolean,
           })));
 
-          // Set initial canvas objects from server
+          // Snapshot hydration is atomic at the store boundary to avoid mixed
+          // participant/object versions during first paint after join.
           const canvasObjects = (response.canvasObjects || []) as Array<Record<string, unknown>>;
           setObjects(canvasObjects as unknown as CanvasObject[]);
 
@@ -125,7 +134,10 @@ export function useJoinRoom() {
   return joinRoom;
 }
 
-// Hook to leave the current room.
+/**
+ * Leaves the active room and clears room-scoped state locally only after server
+ * acknowledgement, preventing accidental local teardown on failed leave attempts.
+ */
 export function useLeaveRoom() {
   const clearRoom = useRoomStore(useShallow((s) => s.clearRoom));
   const clearObjects = useCanvasObjectsStore(useShallow((s) => s.clear));
@@ -147,7 +159,11 @@ export function useLeaveRoom() {
   return leaveRoom;
 }
 
-// Hook to listen for participant join events in the current room.
+/**
+ * Subscribes to participant-join broadcasts.
+ * Callback shape stays transport-friendly (`Record<string, unknown>`) because the
+ * payload originates from socket events, not compile-time typed RPC.
+ */
 export function useRoomUserJoined(callback: (participant: Record<string, unknown>) => void): void {
   const handleUserJoined = useCallback(
     (payload: UserJoinedPayload) => {
@@ -165,7 +181,9 @@ export function useRoomUserJoined(callback: (participant: Record<string, unknown
   }, [handleUserJoined]);
 }
 
-// Hook to listen for participant leave events in the current room.
+/**
+ * Subscribes to participant-leave broadcasts for room presence convergence.
+ */
 export function useRoomUserLeft(callback: (participantId: string) => void): void {
   const handleUserLeft = useCallback(
     (payload: UserLeftPayload) => {
@@ -182,8 +200,13 @@ export function useRoomUserLeft(callback: (participantId: string) => void): void
   }, [handleUserLeft]);
 }
 
-// Hook to automatically rejoin the current room after socket reconnect.
-// This restores server-side room membership so realtime object updates continue.
+/**
+ * Rejoins the current room after transport reconnect.
+ *
+ * Reconnect restores the low-level socket connection, but room membership is
+ * application-level state and must be explicitly re-established. We also refresh
+ * participants and objects to reconcile any events missed while offline.
+ */
 export function useRoomAutoRejoin(): void {
   const room = useRoomStore(useShallow((s) => s.room));
   const setRoom = useRoomStore(useShallow((s) => s.setRoom));

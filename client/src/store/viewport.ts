@@ -29,6 +29,13 @@ export interface ViewportState {
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5.0;
 
+/**
+ * Viewport transform store shared by all canvas interactions.
+ *
+ * `offsetX/offsetY/scale` are applied directly to Konva Stage transforms and
+ * therefore must remain internally consistent: zoom operations update both scale
+ * and offsets together to keep the zoom anchor stable.
+ */
 export const useViewportStore = create<ViewportState>((set) => ({
   offsetX: 0,
   offsetY: 0,

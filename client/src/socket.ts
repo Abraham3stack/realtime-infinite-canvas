@@ -13,8 +13,13 @@ export const socket: Socket = io(SERVER_URL, {
   transports: ['websocket', 'polling'],
 });
 
-// setSocketToken updates the socket's auth token and reconnects if needed.
-// Called after user creates or validates a guest session.
+/**
+ * Updates the auth token used by Socket.IO handshake.
+ *
+ * If the socket is already connected, a reconnect is required so the server
+ * receives the new token; mutating `socket.auth` alone does not retroactively
+ * re-authenticate an existing transport.
+ */
 export function setSocketToken(token: string): void {
   socket.auth = { token };
   if (!socket.connected) {

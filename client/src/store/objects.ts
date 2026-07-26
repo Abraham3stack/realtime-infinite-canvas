@@ -48,6 +48,16 @@ export interface MediaObjectInput {
   createdBySessionId?: string;
 }
 
+/**
+ * Canonical client-side canvas object store.
+ *
+ * Invariants:
+ * - `objects` is the render source of truth.
+ * - `nextZIndex` is monotonic within a client session to preserve stacking order
+ *   for newly created objects.
+ * - Realtime sync paths may overwrite local values with server-canonical fields
+ *   (timestamps/media metadata) during echo reconciliation.
+ */
 export interface CanvasObjectsState {
   objects: CanvasObject[];
   nextZIndex: number;
@@ -59,7 +69,7 @@ export interface CanvasObjectsState {
   deleteObject: (id: string) => void;
   getObject: (id: string) => CanvasObject | undefined;
   
-  // Set all objects (for sync from server — bulk hydration on join)
+  // Set all objects from a server snapshot (join/rejoin hydration boundary).
   setObjects: (objects: CanvasObject[]) => void;
 
   // Add a single object received from a remote peer.
@@ -71,7 +81,12 @@ export interface CanvasObjectsState {
   clear: () => void;
 }
 
-// Factory for default object properties by type
+/**
+ * Default visual baselines for each object type.
+ *
+ * These defaults intentionally keep initial dimensions and colors predictable so
+ * realtime demos stay legible before per-object customization is introduced.
+ */
 const getDefaultProperties = (type: CanvasObjectType) => {
   const baseSize = 100;
   const defaults: Record<CanvasObjectType, Partial<CanvasObject>> = {
@@ -212,6 +227,8 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
       const entries = Object.entries(updates) as Array<[keyof CanvasObject, unknown]>;
       const hasMeaningfulChange = entries.some(([key, value]) => !Object.is(current[key], value));
 
+      // No-op suppression avoids unnecessary rerenders and downstream socket
+      // emissions when callers submit unchanged values.
       if (!hasMeaningfulChange) {
         return state;
       }
@@ -240,7 +257,8 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
   },
 
   setObjects: (objects) => {
-    // When receiving objects from server, calculate the highest z-index
+    // Preserve stacking semantics by advancing local allocation cursor beyond
+    // the highest server-provided z-index in the snapshot.
     const maxZIndex = objects.reduce((max, obj) => Math.max(max, obj.zIndex), 0);
     set({
       objects,

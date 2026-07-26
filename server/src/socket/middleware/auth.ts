@@ -18,6 +18,8 @@ export async function authMiddleware(
     return;
   }
 
+  // Session tokens are compared via hash so plaintext tokens never become part
+  // of persistence or log surfaces during normal auth flow.
   const tokenHash = createHash('sha256').update(token).digest('hex');
 
   const session = await prisma.guestSession

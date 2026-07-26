@@ -15,8 +15,17 @@ export interface Point {
 }
 
 /**
+ * Coordinate model used across the canvas stack:
+ * - Client space: browser event coordinates (clientX/clientY).
+ * - Canvas-local space: coordinates relative to the Konva container element.
+ * - World space: persisted object coordinates in application state and sync events.
+ */
+
+/**
  * Convert the visible canvas center (screen/canvas space) into world space.
  * World space is what object x/y positions use in the store.
+ *
+ * This keeps object creation deterministic even after pan/zoom transforms.
  */
 export function canvasCenterToWorld(size: CanvasSize, viewport: ViewportTransform): Point {
   return {
@@ -30,6 +39,9 @@ export function canvasCenterToWorld(size: CanvasSize, viewport: ViewportTransfor
  *
  * Konva zoom math expects points in canvas-local coordinates,
  * not global viewport coordinates.
+ *
+ * Passing raw client coordinates here can produce perceived zoom drift and
+ * hit-test mismatch around transformed content.
  */
 export function clientToCanvasPoint(clientX: number, clientY: number, containerRect: DOMRect): Point {
   return {

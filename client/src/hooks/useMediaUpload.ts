@@ -27,6 +27,13 @@ interface UploadResponse {
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
+/**
+ * Uploads one or more media files and returns normalized metadata used for
+ * canvas object creation.
+ *
+ * Uses XMLHttpRequest instead of fetch because upload progress events are needed
+ * for responsive UI feedback during potentially large audio/video uploads.
+ */
 export async function uploadMediaFiles(params: {
   files: File[];
   expectedType: MediaUploadType;

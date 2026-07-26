@@ -56,5 +56,8 @@ const ObjectRendererImpl: React.FC<ObjectRendererProps> = ({
 
 export const ObjectRenderer = React.memo(
   ObjectRendererImpl,
+  // Shape components are pure over object identity + selection state.
+  // The store's update path replaces only changed objects, so reference
+  // equality is a reliable fast-path that avoids repainting unaffected nodes.
   (prev, next) => prev.object === next.object && prev.selected === next.selected
 );

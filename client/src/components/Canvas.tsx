@@ -41,6 +41,10 @@ interface CanvasProps {
   sessionId?: string;
 }
 
+/**
+ * Toolbar order is intentionally stable so power users can build muscle memory
+ * around icon positions in addition to keyboard shortcuts.
+ */
 const TOOLBAR_ITEMS: Array<{ type: CanvasObjectType; label: string; hotkey: string; icon: string }> = [
   { type: 'rectangle', label: 'Rectangle', hotkey: 'R', icon: '[]' },
   { type: 'circle', label: 'Circle', hotkey: 'C', icon: '()' },
@@ -48,6 +52,18 @@ const TOOLBAR_ITEMS: Array<{ type: CanvasObjectType; label: string; hotkey: stri
   { type: 'sticky-note', label: 'Sticky Note', hotkey: 'S', icon: 'SN' },
 ];
 
+/**
+ * Canvas is the collaboration surface where local optimistic edits are merged
+ * with server-broadcast updates.
+ *
+ * Design invariants:
+ * - Store coordinates are world-space values, while Konva pointer events begin in
+ *   browser/client coordinates; conversion happens at interaction boundaries.
+ * - Local operations emit an operationId so socket echoes can be recognized and
+ *   deduplicated without suppressing remote participant updates.
+ * - Pan/zoom input is batched with requestAnimationFrame to cap state writes and
+ *   avoid flooding React/Konva with per-event updates under high input rates.
+ */
 export const Canvas: React.FC<CanvasProps> = ({
   participantCount,
   loadingPhase = null,
@@ -88,14 +104,19 @@ export const Canvas: React.FC<CanvasProps> = ({
   }));
   const { room } = useRoomStore();
 
-  // Track pending operations for deduplication (operationId -> true means local)
+  // Tracks optimistic operations until their server echo returns.
+  // This prevents duplicate application of local writes while preserving all
+  // remote participant updates.
   const pendingOperations = useRef<Set<string>>(new Set());
   const panRafRef = useRef<number | null>(null);
   const pendingPanRef = useRef({ dx: 0, dy: 0 });
   const zoomRafRef = useRef<number | null>(null);
   const pendingZoomRef = useRef<{ deltaY: number; mouseX: number; mouseY: number } | null>(null);
 
-  // Generate unique operation ID for deduplication
+  /**
+   * Generates a per-operation correlation id used for optimistic echo handling.
+   * No global ordering guarantee is assumed from this id.
+   */
   const generateOperationId = useCallback(() => {
     return `op_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }, []);
@@ -137,6 +158,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const createObjectAndSync = useCallback((type: CanvasObjectType) => {
     if (!room) return;
 
+    // Objects are created at viewport center in world-space so creation remains
+    // predictable regardless of current pan/zoom.
     const center = canvasCenterToWorld(stageSize, { offsetX, offsetY, scale });
 
     const id = addObject(type, center.x, center.y);
@@ -279,6 +302,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       roomId: room?.id ?? null,
       exportedAt: new Date().toISOString(),
       objects: objects.map((obj) => {
+        // Normalize invalid/placeholder media dimensions to null so exported JSON
+        // mirrors persisted semantics used by downstream validation tooling.
         const normalizedMediaWidth = typeof obj.mediaWidth === 'number' && obj.mediaWidth > 0 ? obj.mediaWidth : null;
         const normalizedMediaHeight = typeof obj.mediaHeight === 'number' && obj.mediaHeight > 0 ? obj.mediaHeight : null;
 
@@ -350,6 +375,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
     if (!existing) return;
 
+    // No-op suppression reduces avoidable socket traffic and DB writes during
+    // drag paths that report duplicate positions.
     if (existing.x === x && existing.y === y) return;
 
     updateObject(objectId, { x, y });
@@ -360,6 +387,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
     if (!existing) return;
 
+    // No-op suppression mirrors move semantics for resize updates.
     if (existing.width === width && existing.height === height) return;
 
     updateObject(objectId, { width, height });
@@ -415,7 +443,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [createObjectAndSync, room]);
 
-  // Socket event listeners for object synchronization
+  // Subscriptions are attached only while in-room so handlers cannot leak across
+  // room transitions.
   useEffect(() => {
     if (!room) return;
 
@@ -432,8 +461,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
 
-      // Use addObjectFromSync (functional update) to avoid snapshot races
-      // when multiple object:created events arrive in rapid succession.
+      // Functional add avoids stale snapshot races during bursty create broadcasts.
       useCanvasObjectsStore.getState().addObjectFromSync(object);
     };
 
@@ -527,7 +555,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, []);
 
-  // Mouse move: pan if dragging
+  // Mouse move: pan if dragging.
+  // Input events can arrive much faster than paint frames; batching pan deltas in
+  // rAF keeps interaction smooth under sustained pointer movement.
   const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     if (!isPanning.current) return;
 
@@ -560,7 +590,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, []);
 
-  // Wheel: zoom toward/away from mouse position
+  // Wheel: zoom toward/away from mouse position.
+  // Coalescing wheel deltas per frame prevents runaway zoom acceleration on
+  // high-resolution trackpads while preserving intent.
   const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
 

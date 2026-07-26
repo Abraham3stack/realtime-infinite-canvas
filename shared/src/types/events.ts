@@ -1,4 +1,10 @@
-// Socket.IO event types
+// Socket.IO event types shared by client/server.
+//
+// Realtime contract notes:
+// - `operationId` correlates optimistic client actions with server echoes for
+//   deduplication/reconciliation.
+// - `serverTs` represents server-observed timing and should not be treated as a
+//   strict total ordering across distributed clients.
 
 import { CanvasObject, CanvasObjectPatch } from './canvas.js';
 import { RoomState, Presence, Viewport, RoomParticipant } from './room.js';
