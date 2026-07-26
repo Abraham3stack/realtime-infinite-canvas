@@ -257,12 +257,14 @@ Frontend React application with Vite build system.
 
 ## Roadmap
 
-- **M1.A** - Build System & Type Safety ✅
-- **M1.B** - Backend & Frontend Shells (in progress)
-- **M1.C** - Database Integration & Auth
-- **M1.D** - Room Lifecycle
-- **M1.E** - Canvas & Objects
-- **M1.F** - Validation & Testing
+- **Phase 1** - Core App and Realtime Baseline ✅
+- **Phase 2** - Infinite Canvas and Mandatory Object Types ✅
+- **Phase 3** - Media Pipeline and Export Verification ✅
+- **Phase 4** - Performance Hardening for Judging Conditions ✅
+- **Phase 5** - Creative Features (not started)
+- **Phase 6** - Final Polish and Submission Readiness (not started)
+
+Current status is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Scripts
 
@@ -272,6 +274,8 @@ npm run typecheck  # Type check all packages
 npm run lint       # Lint all files
 npm run format     # Format all files
 npm run dev        # Start dev servers
+npm run validate:phase4:gates    # Run phase-4 quality gates (typecheck/lint/build/test)
+npm run validate:phase4:harness  # Run executable browser harness and write evidence artifact
 ```
 
 ## License

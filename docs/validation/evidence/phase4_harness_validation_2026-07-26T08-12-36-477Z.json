@@ -1,0 +1,1594 @@
+{
+  "runAt": "2026-07-26T08:12:36.476Z",
+  "baseUrl": "http://localhost:5173",
+  "room": {
+    "roomId": "7c90ae59-1d22-4b84-a8d3-be7657db3492",
+    "shareCode": "MN6HK7"
+  },
+  "objectIds": {
+    "targetObjectId": "obj_1785053555700_mytx4fv"
+  },
+  "smokeChecks": {
+    "create": true,
+    "select": true,
+    "drag": true,
+    "resize": true,
+    "export": true,
+    "synchronization": true
+  },
+  "phase4Checks": {
+    "browserSmoke": true,
+    "twoBrowserValidation": true,
+    "realtimeSync": true,
+    "exportValidation": true,
+    "resizeLifecycle": true
+  },
+  "drag": {
+    "bobBefore": {
+      "x": 170,
+      "y": 150,
+      "width": 180,
+      "height": 160
+    },
+    "bobAfter": {
+      "x": 280,
+      "y": 220,
+      "width": 180,
+      "height": 160
+    },
+    "probe": {
+      "dragEndCount": 1,
+      "before": {
+        "x": 170,
+        "y": 150
+      },
+      "after": {
+        "x": 280,
+        "y": 220
+      },
+      "emittedObjectUpdate": 1
+    },
+    "exportedObject": {
+      "id": "obj_1785053555700_mytx4fv",
+      "type": "rectangle",
+      "x": 280,
+      "y": 220,
+      "width": 180,
+      "height": 160,
+      "zIndex": 1,
+      "rotation": 0,
+      "color": "#3498db",
+      "createdBySessionId": "88b7e71a-3a35-4f81-b0c0-00c5b5a8b9a5",
+      "createdAt": "2026-07-26T08:12:35.692Z",
+      "updatedAt": "2026-07-26T08:12:36.414Z",
+      "mediaUrl": null,
+      "mediaPublicId": null,
+      "mediaResourceType": null,
+      "mediaFormat": null,
+      "mimeType": null,
+      "sizeBytes": null,
+      "mediaWidth": null,
+      "mediaHeight": null,
+      "durationMs": null,
+      "mediaCreatedAt": null,
+      "ownership": {
+        "createdBySessionId": "88b7e71a-3a35-4f81-b0c0-00c5b5a8b9a5"
+      },
+      "timestamps": {
+        "createdAt": "2026-07-26T08:12:35.692Z",
+        "updatedAt": "2026-07-26T08:12:36.414Z",
+        "mediaCreatedAt": null
+      },
+      "media": null
+    }
+  },
+  "resize": {
+    "bobBefore": {
+      "x": 445.5,
+      "y": 345.5,
+      "width": 100,
+      "height": 100
+    },
+    "bobAfter": {
+      "x": 170,
+      "y": 150,
+      "width": 180,
+      "height": 160
+    },
+    "postResize": {
+      "counts": {
+        "handle:mousedown": 1,
+        "handle:dragstart": 1,
+        "group:dragstart": 1,
+        "stage:dragstart": 1,
+        "handle:dragmove": 16,
+        "group:dragmove": 16,
+        "stage:dragmove": 16,
+        "handle:dragend": 1,
+        "group:dragend": 1,
+        "stage:dragend": 1
+      },
+      "firstMissingHandleStage": null,
+      "groupDragStarted": false,
+      "bodyAfter": {
+        "width": 180,
+        "height": 160
+      },
+      "groupAfter": {
+        "x": 170,
+        "y": 150
+      },
+      "eventLog": [
+        {
+          "at": 1785053555786,
+          "source": "handle",
+          "eventName": "mousedown",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": false,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 544.609375,
+            "y": 444.609375
+          }
+        },
+        {
+          "at": 1785053555795,
+          "source": "handle",
+          "eventName": "dragstart",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 549.609375,
+            "y": 448.609375
+          }
+        },
+        {
+          "at": 1785053555795,
+          "source": "group",
+          "eventName": "dragstart",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 549.609375,
+            "y": 448.609375
+          }
+        },
+        {
+          "at": 1785053555795,
+          "source": "stage",
+          "eventName": "dragstart",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 549.609375,
+            "y": 448.609375
+          }
+        },
+        {
+          "at": 1785053555795,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 549.609375,
+            "y": 448.609375
+          }
+        },
+        {
+          "at": 1785053555795,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 549.609375,
+            "y": 448.609375
+          }
+        },
+        {
+          "at": 1785053555795,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 549.609375,
+            "y": 448.609375
+          }
+        },
+        {
+          "at": 1785053555812,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 554.609375,
+            "y": 451.609375
+          }
+        },
+        {
+          "at": 1785053555812,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 554.609375,
+            "y": 451.609375
+          }
+        },
+        {
+          "at": 1785053555812,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 554.609375,
+            "y": 451.609375
+          }
+        },
+        {
+          "at": 1785053555829,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 559.609375,
+            "y": 455.609375
+          }
+        },
+        {
+          "at": 1785053555829,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 559.609375,
+            "y": 455.609375
+          }
+        },
+        {
+          "at": 1785053555829,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 559.609375,
+            "y": 455.609375
+          }
+        },
+        {
+          "at": 1785053555845,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 564.609375,
+            "y": 459.609375
+          }
+        },
+        {
+          "at": 1785053555845,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 564.609375,
+            "y": 459.609375
+          }
+        },
+        {
+          "at": 1785053555845,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 564.609375,
+            "y": 459.609375
+          }
+        },
+        {
+          "at": 1785053555859,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 569.609375,
+            "y": 463.609375
+          }
+        },
+        {
+          "at": 1785053555859,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 569.609375,
+            "y": 463.609375
+          }
+        },
+        {
+          "at": 1785053555859,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 569.609375,
+            "y": 463.609375
+          }
+        },
+        {
+          "at": 1785053555874,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 574.609375,
+            "y": 466.609375
+          }
+        },
+        {
+          "at": 1785053555874,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 574.609375,
+            "y": 466.609375
+          }
+        },
+        {
+          "at": 1785053555874,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 574.609375,
+            "y": 466.609375
+          }
+        },
+        {
+          "at": 1785053555894,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 579.609375,
+            "y": 470.609375
+          }
+        },
+        {
+          "at": 1785053555894,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 579.609375,
+            "y": 470.609375
+          }
+        },
+        {
+          "at": 1785053555894,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 579.609375,
+            "y": 470.609375
+          }
+        },
+        {
+          "at": 1785053555910,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 584.609375,
+            "y": 474.609375
+          }
+        },
+        {
+          "at": 1785053555910,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 584.609375,
+            "y": 474.609375
+          }
+        },
+        {
+          "at": 1785053555910,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 584.609375,
+            "y": 474.609375
+          }
+        },
+        {
+          "at": 1785053555926,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 589.609375,
+            "y": 478.609375
+          }
+        },
+        {
+          "at": 1785053555926,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 589.609375,
+            "y": 478.609375
+          }
+        },
+        {
+          "at": 1785053555926,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 589.609375,
+            "y": 478.609375
+          }
+        },
+        {
+          "at": 1785053555940,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 594.609375,
+            "y": 481.609375
+          }
+        },
+        {
+          "at": 1785053555940,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 594.609375,
+            "y": 481.609375
+          }
+        },
+        {
+          "at": 1785053555940,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 594.609375,
+            "y": 481.609375
+          }
+        },
+        {
+          "at": 1785053555957,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 599.609375,
+            "y": 485.609375
+          }
+        },
+        {
+          "at": 1785053555957,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 599.609375,
+            "y": 485.609375
+          }
+        },
+        {
+          "at": 1785053555957,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 599.609375,
+            "y": 485.609375
+          }
+        },
+        {
+          "at": 1785053555974,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 604.609375,
+            "y": 489.609375
+          }
+        },
+        {
+          "at": 1785053555974,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 604.609375,
+            "y": 489.609375
+          }
+        },
+        {
+          "at": 1785053555974,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 604.609375,
+            "y": 489.609375
+          }
+        },
+        {
+          "at": 1785053555990,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 609.609375,
+            "y": 493.609375
+          }
+        },
+        {
+          "at": 1785053555990,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 609.609375,
+            "y": 493.609375
+          }
+        },
+        {
+          "at": 1785053555990,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 609.609375,
+            "y": 493.609375
+          }
+        },
+        {
+          "at": 1785053556007,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 614.609375,
+            "y": 496.609375
+          }
+        },
+        {
+          "at": 1785053556007,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 614.609375,
+            "y": 496.609375
+          }
+        },
+        {
+          "at": 1785053556007,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 614.609375,
+            "y": 496.609375
+          }
+        },
+        {
+          "at": 1785053556024,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 619.609375,
+            "y": 500.609375
+          }
+        },
+        {
+          "at": 1785053556024,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 619.609375,
+            "y": 500.609375
+          }
+        },
+        {
+          "at": 1785053556024,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 619.609375,
+            "y": 500.609375
+          }
+        },
+        {
+          "at": 1785053556041,
+          "source": "handle",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 624.609375,
+            "y": 504.609375
+          }
+        },
+        {
+          "at": 1785053556041,
+          "source": "group",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 624.609375,
+            "y": 504.609375
+          }
+        },
+        {
+          "at": 1785053556041,
+          "source": "stage",
+          "eventName": "dragmove",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": true,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 624.609375,
+            "y": 504.609375
+          }
+        },
+        {
+          "at": 1785053556053,
+          "source": "handle",
+          "eventName": "dragend",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": false,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 624.609375,
+            "y": 504.609375
+          }
+        },
+        {
+          "at": 1785053556053,
+          "source": "group",
+          "eventName": "dragend",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": false,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 624.609375,
+            "y": 504.609375
+          }
+        },
+        {
+          "at": 1785053556053,
+          "source": "stage",
+          "eventName": "dragend",
+          "targetClass": "Rect",
+          "targetId": null,
+          "targetParentId": "obj_1785053555700_mytx4fv",
+          "targetDraggable": true,
+          "targetIsHandle": true,
+          "targetIsBody": false,
+          "targetIsGroup": false,
+          "stageIsDragging": false,
+          "handleIsDragging": false,
+          "groupIsDragging": false,
+          "pointerPosition": {
+            "x": 624.609375,
+            "y": 504.609375
+          }
+        }
+      ],
+      "domLog": [
+        {
+          "at": 1785053555779,
+          "eventName": "pointermove",
+          "clientX": 919.390625,
+          "clientY": 456.390625,
+          "buttons": 0,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555780,
+          "eventName": "mousemove",
+          "clientX": 919,
+          "clientY": 456,
+          "buttons": 0,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555786,
+          "eventName": "pointerdown",
+          "clientX": 919.390625,
+          "clientY": 456.390625,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555786,
+          "eventName": "mousedown",
+          "clientX": 919,
+          "clientY": 456,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555794,
+          "eventName": "pointermove",
+          "clientX": 924.390625,
+          "clientY": 460.140625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555795,
+          "eventName": "mousemove",
+          "clientX": 924,
+          "clientY": 460,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555811,
+          "eventName": "pointermove",
+          "clientX": 929.390625,
+          "clientY": 463.890625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555811,
+          "eventName": "mousemove",
+          "clientX": 929,
+          "clientY": 463,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555829,
+          "eventName": "pointermove",
+          "clientX": 934.390625,
+          "clientY": 467.640625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555829,
+          "eventName": "mousemove",
+          "clientX": 934,
+          "clientY": 467,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555844,
+          "eventName": "pointermove",
+          "clientX": 939.390625,
+          "clientY": 471.390625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555844,
+          "eventName": "mousemove",
+          "clientX": 939,
+          "clientY": 471,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555859,
+          "eventName": "pointermove",
+          "clientX": 944.390625,
+          "clientY": 475.140625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555859,
+          "eventName": "mousemove",
+          "clientX": 944,
+          "clientY": 475,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555874,
+          "eventName": "pointermove",
+          "clientX": 949.390625,
+          "clientY": 478.890625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555874,
+          "eventName": "mousemove",
+          "clientX": 949,
+          "clientY": 478,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555894,
+          "eventName": "pointermove",
+          "clientX": 954.390625,
+          "clientY": 482.640625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555894,
+          "eventName": "mousemove",
+          "clientX": 954,
+          "clientY": 482,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555910,
+          "eventName": "pointermove",
+          "clientX": 959.390625,
+          "clientY": 486.390625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555910,
+          "eventName": "mousemove",
+          "clientX": 959,
+          "clientY": 486,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555925,
+          "eventName": "pointermove",
+          "clientX": 964.390625,
+          "clientY": 490.140625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555926,
+          "eventName": "mousemove",
+          "clientX": 964,
+          "clientY": 490,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555940,
+          "eventName": "pointermove",
+          "clientX": 969.390625,
+          "clientY": 493.890625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555940,
+          "eventName": "mousemove",
+          "clientX": 969,
+          "clientY": 493,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555957,
+          "eventName": "pointermove",
+          "clientX": 974.390625,
+          "clientY": 497.640625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555957,
+          "eventName": "mousemove",
+          "clientX": 974,
+          "clientY": 497,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555974,
+          "eventName": "pointermove",
+          "clientX": 979.390625,
+          "clientY": 501.390625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555974,
+          "eventName": "mousemove",
+          "clientX": 979,
+          "clientY": 501,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053555990,
+          "eventName": "pointermove",
+          "clientX": 984.390625,
+          "clientY": 505.140625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053555990,
+          "eventName": "mousemove",
+          "clientX": 984,
+          "clientY": 505,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053556007,
+          "eventName": "pointermove",
+          "clientX": 989.390625,
+          "clientY": 508.890625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053556007,
+          "eventName": "mousemove",
+          "clientX": 989,
+          "clientY": 508,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053556023,
+          "eventName": "pointermove",
+          "clientX": 994.390625,
+          "clientY": 512.640625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053556024,
+          "eventName": "mousemove",
+          "clientX": 994,
+          "clientY": 512,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053556041,
+          "eventName": "pointermove",
+          "clientX": 999.390625,
+          "clientY": 516.390625,
+          "buttons": 1,
+          "button": -1,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053556041,
+          "eventName": "mousemove",
+          "clientX": 999,
+          "clientY": 516,
+          "buttons": 1,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        },
+        {
+          "at": 1785053556053,
+          "eventName": "pointerup",
+          "clientX": 999.390625,
+          "clientY": 516.390625,
+          "buttons": 0,
+          "button": 0,
+          "pointerId": 1,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": false
+        },
+        {
+          "at": 1785053556053,
+          "eventName": "mouseup",
+          "clientX": 999,
+          "clientY": 516,
+          "buttons": 0,
+          "button": 0,
+          "pointerId": null,
+          "targetTag": "CANVAS",
+          "hasPointerCapture": null
+        }
+      ],
+      "stageDraggingAfter": false
+    }
+  },
+  "notes": {
+    "productionCodeChangedInHarnessRun": false
+  }
+}

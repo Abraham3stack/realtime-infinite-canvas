@@ -12,14 +12,17 @@ import {
 } from './coordinate-space-helper.js';
 
 function buildHandleCandidatePoints(basePoint) {
-  return [
-    { x: basePoint.x, y: basePoint.y, label: 'base' },
-    { x: basePoint.x - 1, y: basePoint.y - 1, label: 'inset-1' },
-    { x: basePoint.x - 2, y: basePoint.y - 2, label: 'inset-2' },
-    { x: basePoint.x - 3, y: basePoint.y - 3, label: 'inset-3' },
-    { x: basePoint.x - 1, y: basePoint.y - 2, label: 'inset-x1y2' },
-    { x: basePoint.x - 2, y: basePoint.y - 1, label: 'inset-x2y1' },
-  ];
+  const points = [{ x: basePoint.x, y: basePoint.y, label: 'base' }];
+
+  // Probe deeper insets because object bounds can include stroke/shadow space,
+  // while the actual handle is a small draggable rect near the bottom-right.
+  for (let inset = 1; inset <= 14; inset += 1) {
+    points.push({ x: basePoint.x - inset, y: basePoint.y - inset, label: `inset-${inset}` });
+    points.push({ x: basePoint.x - inset, y: basePoint.y - Math.max(1, inset - 1), label: `inset-x${inset}y${Math.max(1, inset - 1)}` });
+    points.push({ x: basePoint.x - Math.max(1, inset - 1), y: basePoint.y - inset, label: `inset-x${Math.max(1, inset - 1)}y${inset}` });
+  }
+
+  return points;
 }
 
 export async function runSingleUserResizeValidation(

@@ -16,9 +16,12 @@
     "format": "prettier --write --ignore-path .gitignore .",
     "dev": "npm run dev --workspaces --if-present",
     "dev:all": "concurrently -k -n server,client -c cyan,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
-    "install:all": "npm install && npm install --workspaces"
+    "install:all": "npm install && npm install --workspaces",
+    "validate:phase4:harness": "node docs/validation/harness/run-phase4-validation.mjs",
+    "validate:phase4:gates": "npm run typecheck && npm run lint && npm run build && npm test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "concurrently": "^8.2.2",

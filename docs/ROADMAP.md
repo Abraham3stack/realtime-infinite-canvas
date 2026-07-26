@@ -1261,6 +1261,8 @@ Reach stable performance and correctness with realistic judging load.
 
 ### 🧪 Latest Validation Snapshot
 
+- Scope note (2026-07-26 closeout): this rerun validated harness executability and Phase 4 gates; high-load metrics from 2026-07-25 are retained as historical evidence and were not re-executed in this limited-scope task.
+
 - Current single-run load measurement (browser automation, local env):
   - 100 objects: create+sync 3573ms, pan interaction 175ms, zoom burst 364ms
   - 250 objects: create+sync 8600ms, pan interaction 178ms, zoom burst 333ms
@@ -1283,6 +1285,10 @@ Reach stable performance and correctness with realistic judging load.
   - drag path passed with persisted position updates
   - resize path passed with persisted width/height updates
   - export payload matched in-memory object state and synchronization events
+- Fresh harness rerun (2026-07-26):
+  - executable harness run passed and wrote evidence artifact at `docs/validation/evidence/phase4_harness_validation_2026-07-26T08-12-36-477Z.json`
+  - validated: browser smoke, two-browser validation, realtime sync, export validation, and resize lifecycle checks
+  - gate rerun passed: `npm run typecheck`, `npm run lint`, `npm run build`, `npm test`
 
 ### 📝 Technical Debt
 
