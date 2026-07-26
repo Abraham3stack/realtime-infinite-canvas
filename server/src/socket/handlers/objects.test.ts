@@ -268,3 +268,48 @@ test('unauthorized socket cannot create object in a different room', async () =>
     message: 'Not a member of this room',
   });
 });
+
+test('invalid object:update geometry is rejected without persistence or broadcast', async () => {
+  const roomId = 'room-invalid-update';
+  const { io, socket, repository } = setupConnection(roomId);
+
+  socket.emit('object:create', {
+    operationId: 'op-create-invalid-1',
+    roomId,
+    object: {
+      id: 'obj-invalid-1',
+      x: 10,
+      y: 20,
+      type: 'rectangle',
+      width: 120,
+      height: 80,
+      rotation: 0,
+      zIndex: 1,
+      color: '#3498db',
+    },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  io.broadcasts = [];
+  socket.emitted = [];
+
+  socket.emit('object:update', {
+    operationId: 'op-update-invalid-1',
+    roomId,
+    objectId: 'obj-invalid-1',
+    updates: { width: -25 },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const roomObjects = await getRoomObjectsFromRepository(repository, roomId);
+  assert.equal(roomObjects.length, 1);
+  assert.equal(roomObjects[0].width, 120);
+  assert.equal(io.broadcasts.length, 0);
+  assert.equal(socket.emitted.length, 1);
+  assert.equal(socket.emitted[0].event, 'error');
+  assert.deepEqual(socket.emitted[0].payload, {
+    code: 'INVALID_PAYLOAD',
+    message: 'Invalid object payload',
+  });
+});

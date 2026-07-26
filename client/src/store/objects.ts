@@ -48,6 +48,69 @@ export interface MediaObjectInput {
   createdBySessionId?: string;
 }
 
+const MIN_OBJECT_DIMENSION = 1;
+const MAX_OBJECT_DIMENSION = 10000;
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function sanitizeDimension(value: unknown, fallback: number): number {
+  if (!isFiniteNumber(value)) return fallback;
+  return clamp(value, MIN_OBJECT_DIMENSION, MAX_OBJECT_DIMENSION);
+}
+
+function sanitizeCoordinate(value: unknown, fallback = 0): number {
+  if (!isFiniteNumber(value)) return fallback;
+  return value;
+}
+
+function sanitizeRotation(value: unknown): number {
+  if (!isFiniteNumber(value)) return 0;
+  return value;
+}
+
+function sanitizeZIndex(value: unknown, fallback = 0): number {
+  if (!isFiniteNumber(value)) return fallback;
+  return Math.trunc(value);
+}
+
+function sanitizeFontSize(value: unknown, fallback: number): number {
+  if (!isFiniteNumber(value)) return fallback;
+  return clamp(value, 1, 512);
+}
+
+function sanitizeCanvasObject(raw: CanvasObject): CanvasObject {
+  const width = sanitizeDimension(raw.width, 100);
+  const height = sanitizeDimension(raw.height, 100);
+  const fallbackColor =
+    raw.type === 'circle'
+      ? '#e74c3c'
+      : raw.type === 'text'
+        ? '#2c3e50'
+        : raw.type === 'sticky-note'
+          ? '#f1c40f'
+          : '#3498db';
+
+  return {
+    ...raw,
+    x: sanitizeCoordinate(raw.x),
+    y: sanitizeCoordinate(raw.y),
+    width,
+    height,
+    rotation: sanitizeRotation(raw.rotation),
+    zIndex: sanitizeZIndex(raw.zIndex),
+    color: typeof raw.color === 'string' && raw.color.length > 0 ? raw.color : fallbackColor,
+    fontSize: raw.fontSize !== undefined ? sanitizeFontSize(raw.fontSize, 12) : raw.fontSize,
+    mediaWidth: raw.mediaWidth !== undefined ? sanitizeDimension(raw.mediaWidth, width) : raw.mediaWidth,
+    mediaHeight: raw.mediaHeight !== undefined ? sanitizeDimension(raw.mediaHeight, height) : raw.mediaHeight,
+  };
+}
+
 /**
  * Canonical client-side canvas object store.
  *
@@ -239,8 +302,10 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
         updatedAt: (updates.updatedAt as string | undefined) ?? new Date().toISOString(),
       };
 
+      const safeNext = sanitizeCanvasObject(next);
+
       const objects = state.objects.slice();
-      objects[index] = next;
+      objects[index] = safeNext;
 
       return { objects };
     });
@@ -257,23 +322,27 @@ export const useCanvasObjectsStore = create<CanvasObjectsState>((set, get) => ({
   },
 
   setObjects: (objects) => {
+    const sanitized = objects.map((object) => sanitizeCanvasObject(object));
+
     // Preserve stacking semantics by advancing local allocation cursor beyond
     // the highest server-provided z-index in the snapshot.
-    const maxZIndex = objects.reduce((max, obj) => Math.max(max, obj.zIndex), 0);
+    const maxZIndex = sanitized.reduce((max, obj) => Math.max(max, obj.zIndex), 0);
     set({
-      objects,
+      objects: sanitized,
       nextZIndex: maxZIndex + 1,
     });
   },
 
   addObjectFromSync: (object) => {
+    const safeObject = sanitizeCanvasObject(object);
+
     // Functional update prevents snapshot races when multiple object:created
     // events arrive in rapid succession — each set() reads the latest committed state.
     set((state) => {
-      if (state.objects.find((o) => o.id === object.id)) return state; // idempotent
+      if (state.objects.find((o) => o.id === safeObject.id)) return state; // idempotent
       return {
-        objects: [...state.objects, object],
-        nextZIndex: Math.max(state.nextZIndex, object.zIndex + 1),
+        objects: [...state.objects, safeObject],
+        nextZIndex: Math.max(state.nextZIndex, safeObject.zIndex + 1),
       };
     });
   },

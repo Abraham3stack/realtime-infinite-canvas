@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Replay State Render</title>
+  <style>
+    body { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f8fafc; }
+    .meta { padding: 12px 16px; border-bottom: 1px solid #cbd5e1; background: #e2e8f0; }
+    .canvas { position: relative; width: 1400px; height: 900px; margin: 16px auto; background: white; border: 1px solid #94a3b8; overflow: hidden; }
+    .obj { position: absolute; box-sizing: border-box; border: 2px solid #334155; opacity: 0.95; }
+    .text { display: flex; align-items: center; justify-content: center; padding: 4px; font-size: 12px; color: #111827; }
+  </style>
+</head>
+<body>
+  <div class="meta" id="meta"></div>
+  <div class="canvas" id="canvas"></div>
+  <script>
+    const replay = {"roomId":"9b2a783d-48d5-4a18-9ff5-391b1dced961","objects":[{"x":445.5,"y":345.5,"id":"obj_1785070379419_eaz8i0n","type":"rectangle","color":"#3498db","width":100,"height":100,"zIndex":1,"rotation":0,"createdAt":"2026-07-26T12:52:59.419Z","updatedAt":"2026-07-26T12:52:59.421Z"},{"x":445.5,"y":345.5,"id":"obj_1785070379456_961619b","type":"circle","color":"#e74c3c","width":100,"height":100,"zIndex":2,"rotation":0,"createdAt":"2026-07-26T12:52:59.456Z","updatedAt":"2026-07-26T12:52:59.456Z"},{"x":445.5,"y":345.5,"id":"obj_1785070379485_t67yo3s","text":"Text","type":"text","color":"#2c3e50","width":150,"height":40,"zIndex":3,"fontSize":14,"rotation":0,"createdAt":"2026-07-26T12:52:59.485Z","updatedAt":"2026-07-26T12:52:59.485Z"},{"x":555.5,"y":415.5,"id":"obj_1785070379519_wvnmoaq","text":"Note","type":"sticky-note","color":"#f1c40f","width":150,"height":150,"zIndex":4,"fontSize":12,"rotation":0,"createdAt":"2026-07-26T12:52:59.519Z","updatedAt":"2026-07-26T12:52:59.519Z"}],"physics":{"enabled":true,"simulationRunning":false,"gravityY":1.1,"restitution":0.75,"frictionAir":0.02,"staticObjectIds":[],"resetNonce":1,"revision":5},"appliedEventCount":13,"lastSequenceNumber":13};
+    const canvas = document.getElementById('canvas');
+    const meta = document.getElementById('meta');
+    meta.textContent = 'Replay Render | Objects: ' + replay.objects.length + ' | Physics enabled: ' + replay.physics.enabled + ' | Gravity: ' + replay.physics.gravityY;
+
+    for (const obj of replay.objects) {
+      const node = document.createElement('div');
+      node.className = 'obj ' + (obj.type === 'text' ? 'text' : '');
+      node.style.left = obj.x + 'px';
+      node.style.top = obj.y + 'px';
+      node.style.width = obj.width + 'px';
+      node.style.height = obj.height + 'px';
+      node.style.transform = 'rotate(' + obj.rotation + 'rad)';
+      node.style.zIndex = String(obj.zIndex);
+      node.style.background = obj.color || '#cbd5e1';
+      if (obj.type === 'circle') node.style.borderRadius = '50%';
+      if (obj.type === 'text' || obj.type === 'sticky-note') node.textContent = obj.text || obj.type;
+      canvas.appendChild(node);
+    }
+  </script>
+</body>
+</html>

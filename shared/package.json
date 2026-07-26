@@ -9,12 +9,15 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts",
     "dev": "tsc --watch"
   },
   "dependencies": {
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/node": "^20.10.5",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
 }

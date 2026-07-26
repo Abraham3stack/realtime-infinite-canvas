@@ -1499,6 +1499,28 @@ Deliver a polished, reliable submission with clear demo flow and no critical def
 - Add CI-ready artifact capture for final submission rehearsal scenarios
 - Add explicit conflict-resolution policy documentation for long offline sessions with heavy concurrent edits
 
+## Phase 5.4 - RoomEvent Journal (Replay Foundation)
+
+### Status
+
+- ✅ COMPLETE
+
+### Goal
+
+Add the durable append-only RoomEvent journal that future session replay will consume.
+
+### Completed
+
+- Added the RoomEvent Prisma model with room-scoped deterministic sequencing
+- Added append-only journal writes for successful object and user-initiated physics mutations
+- Added a room event query socket API that returns ordered history for a room
+- Documented the journal contract and replay foundation in the data model and README
+
+### Notes
+
+- Current room hydration remains snapshot-based
+- Replay UI, playback controls, and client-side playback engine remain out of scope for this foundation phase
+
 ### Acceptance Criteria
 
 - All mandatory requirements pass acceptance checks
@@ -1532,6 +1554,106 @@ Deliver a polished, reliable submission with clear demo flow and no critical def
 - No runtime errors
 - No UI overlap or responsive regressions
 - Documentation updated
+
+## Phase 5.5 - Replay Engine (Deterministic In-Memory Core)
+
+### Status
+
+- ✅ COMPLETE
+
+### Goal
+
+Implement a deterministic replay engine that reconstructs room state from ordered RoomEvent history without affecting live collaboration flows.
+
+### Completed
+
+- Added isolated replay engine core in shared package with APIs:
+  - `initialize(events)`
+  - `stepForward()`
+  - `stepBackward()`
+  - `reset()`
+  - `getCurrentState()`
+- Added deterministic object-state reconstruction from journaled object events
+- Added deterministic physics-state reconstruction from journaled user-initiated physics events
+- Added client replay store wrapper that is isolated from live room/object/physics stores
+- Added replay engine deterministic test suite (empty, lifecycle, multi-object ordering, physics, reconnect, repeated-run consistency)
+
+### Notes
+
+- Replay reconstruction is event-driven and does not consume snapshot hydration for state construction
+- Replay engine does not mutate socket transport, persistence pipeline, offline queue, or live collaboration state
+- Replay UI and playback controls remain intentionally out of scope for this phase
+
+### Validation Results
+
+- `npm run typecheck` ✅
+- `npm run lint` ✅
+- `npm run build` ✅
+- `npm test` ✅
+- Final replay validation harness ✅ (`docs/validation/harness/run-replay-final-validation.ts`)
+- Scenario 1 (Live Replay Parity) ✅
+  - Exact parity validated for object count, IDs, types, x/y, width/height, rotation, z-order, deletion behavior, and physics state fields
+- Scenario 2 (Large Journal) ✅
+  - Journal size: 538 events
+  - Replay runs: 3/3 deterministic with byte-for-byte stable serialized output
+  - No exceptions and no O(n²) growth signature detected in consecutive run timings
+- Scenario 3 (Real Browser Replay Verification) ✅
+  - Browser evidence screenshots captured for live room and replay-rendered state
+  - Visual/object parity checks passed (layout, stacking, physics config, no missing/duplicate objects)
+- Scenario 4 (Edge Cases) ✅
+  - Empty journal, duplicate sequence rejection, unknown event-type safety, sequence gaps, missing create-before-update/delete, duplicate operationId across sequences, repeat replay consistency
+- Scenario 5 (Isolation) ✅
+  - Replay verified to not mutate live room/object/physics stores, socket connection, RoomEvent journal, or offline queue
+- Evidence bundle: `docs/validation/evidence/replay_final_validation_2026-07-26T12-52-54-115Z/summary.json`
+
+## Phase 5.6 - Replay UI (Client Playback Layer)
+
+### Status
+
+- ✅ COMPLETE
+
+### Goal
+
+Implement a replay user interface on top of the deterministic replay engine without modifying backend, journal, engine internals, or live collaboration architecture.
+
+### Completed
+
+- Added replay panel entry/exit control in the canvas toolbar
+- Added replay transport controls:
+  - play
+  - pause
+  - restart
+  - step backward
+  - step forward
+- Added playback-speed selection:
+  - 0.25x
+  - 0.5x
+  - 1x
+  - 2x
+  - 4x
+- Added timeline scrubber with immediate seek (`seek(position)` through replay store)
+- Added replay progress and current-event metadata display (index, type, sequence, timestamp)
+- Added replay-mode visual indicators (toolbar chip + active banner)
+- Switched canvas and minimap rendering source to replay objects while replay mode is active
+
+### Isolation & Safety
+
+- Replay mode blocks local mutation actions:
+  - create, move, resize, delete
+  - upload entrypoints and retry upload action
+  - object creation keyboard shortcuts
+- Replay mode suppresses live collaboration side effects:
+  - object/physics emit paths
+  - offline queue replay attempts
+  - presence emission
+- Replay state remains isolated from live room/object/physics stores and exits cleanly
+
+### Validation Results
+
+- `npm run typecheck` ✅
+- `npm run lint` ✅
+- `npm run build` ✅
+- `npm test` ✅
 
 ---
 

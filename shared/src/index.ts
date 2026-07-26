@@ -2,6 +2,7 @@
 // Export types first, then validation schemas only
 
 export * from './types/index.js';
+export * from './replay/index.js';
 
 // Validation schemas (exports only schemas and inferred types, not duplicates)
 export {
@@ -48,4 +49,8 @@ export {
   SyncDeltaBatchPayloadSchema,
   MediaRegisterPayloadSchema,
   SyncErrorPayloadSchema,
+  RoomEventTypeSchema,
+  RoomEventSchema,
+  RoomEventsListRequestSchema,
+  RoomEventsListResponseSchema,
 } from './validation/index.js';

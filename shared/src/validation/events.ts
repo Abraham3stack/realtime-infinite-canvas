@@ -4,6 +4,15 @@ import { z } from 'zod';
 import { RoomParticipantSchema, ViewportSchema, RoomStateSchema } from './room.js';
 import { CanvasObjectSchema, CanvasObjectPatchSchema } from './canvas.js';
 
+export const RoomEventTypeSchema = z.enum([
+  'object:create',
+  'object:update',
+  'object:delete',
+  'physics:update-state',
+  'physics:set-static',
+  'physics:reset',
+]);
+
 export const ErrorResponseSchema = z.object({
   code: z.string(),
   message: z.string(),
@@ -187,6 +196,29 @@ export const SyncErrorPayloadSchema = z.object({
   recoverable: z.boolean(),
 });
 
+export const RoomEventSchema = z.object({
+  id: z.string().uuid(),
+  roomId: z.string().uuid(),
+  sequenceNumber: z.number().int().positive(),
+  operationId: z.string().min(1),
+  actorSessionId: z.string().uuid(),
+  actorDisplayName: z.string().min(1).max(50),
+  eventType: RoomEventTypeSchema,
+  payload: z.record(z.string(), z.unknown()),
+  schemaVersion: z.number().int().positive(),
+  createdAt: z.date(),
+});
+
+export const RoomEventsListRequestSchema = z.object({
+  roomId: z.string().uuid(),
+  afterSequenceNumber: z.number().int().nonnegative().optional(),
+});
+
+export const RoomEventsListResponseSchema = z.object({
+  roomId: z.string().uuid(),
+  events: z.array(RoomEventSchema),
+});
+
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 export type AckResponse = z.infer<typeof AckResponseSchema>;
 export type RoomCreatePayload = z.infer<typeof RoomCreatePayloadSchema>;
@@ -210,3 +242,7 @@ export type BulkSyncRequestPayload = z.infer<typeof BulkSyncRequestPayloadSchema
 export type SyncDeltaBatchPayload = z.infer<typeof SyncDeltaBatchPayloadSchema>;
 export type MediaRegisterPayload = z.infer<typeof MediaRegisterPayloadSchema>;
 export type SyncErrorPayload = z.infer<typeof SyncErrorPayloadSchema>;
+export type RoomEventType = z.infer<typeof RoomEventTypeSchema>;
+export type RoomEvent = z.infer<typeof RoomEventSchema>;
+export type RoomEventsListRequest = z.infer<typeof RoomEventsListRequestSchema>;
+export type RoomEventsListResponse = z.infer<typeof RoomEventsListResponseSchema>;

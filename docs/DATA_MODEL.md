@@ -60,6 +60,10 @@ Represents an active lightweight session for a guest user.
 - session token must be unique
 - expired sessions are not valid for write operations
 
+### Relationships
+
+- One GuestSession can author many RoomEvents.
+
 ---
 
 ## Model: Room
@@ -80,6 +84,7 @@ Represents a collaborative canvas room.
 - shareCode: human-shareable code or slug
 - createdBySessionId: foreign key to GuestSession
 - title: optional room title
+- eventSequenceNumber: server-owned monotonic counter for RoomEvent ordering
 - createdAt: creation timestamp
 - updatedAt: update timestamp
 
@@ -87,6 +92,7 @@ Represents a collaborative canvas room.
 
 - shareCode unique
 - createdBySessionId required
+- eventSequenceNumber required for deterministic journal sequencing
 
 ---
 
@@ -169,11 +175,36 @@ Stores canonical object state for each item rendered on the collaborative canvas
 
 ## Model: RoomEvent (Bonus Feature Only - Time Travel)
 
-**MVP Status: EXCLUDED**
+**MVP Status: IMPLEMENTED AS REPLAY FOUNDATION**
 
-RoomEvent is reserved for the optional "Time Travel" replay feature and is not part of the MVP database schema.
+RoomEvent is the append-only journal used as the replay foundation.
 
-If implemented, it will store ordered event history for session replay support. For now, object history tracking is handled only by CanvasObject version/timestamp fields.
+It stores ordered event history for session replay support while current room hydration remains snapshot-based.
+
+### Relationships
+
+- Many RoomEvents belong to one Room.
+- Many RoomEvents are authored by one GuestSession.
+
+### Fields
+
+- id: unique identifier
+- roomId: foreign key to Room
+- sequenceNumber: room-scoped monotonic ordering key
+- operationId: client/server correlation id
+- actorSessionId: foreign key to GuestSession
+- actorDisplayName: actor display name captured at write time
+- eventType: mutation category
+- payload: minimal event payload required to reconstruct the action
+- schemaVersion: journal payload schema version
+- createdAt: write timestamp
+
+### Constraints
+
+- RoomEvent entries are immutable and append-only.
+- sequenceNumber is unique per room and assigned server-side.
+- operationId is unique per room to prevent duplicate journal entries.
+- Event writes do not replace the existing CanvasObject snapshot path.
 
 ---
 
@@ -220,7 +251,7 @@ Tracks Cloudinary media metadata separately for lifecycle management and cleanup
 - Keep media binaries in Cloudinary and only metadata in PostgreSQL.
 - Avoid creating per-object subtype tables during MVP.
 - Avoid role/permission tables until requirements demand them.
-- RoomEvent table is excluded from MVP (reserved for time travel bonus feature).
+- RoomEvent traceability is now the foundation for future session replay.
 - MediaAsset is optional for MVP; implemented metadata currently lives directly on CanvasObject columns.
 
 ## Migration and Evolution Guidance
@@ -234,4 +265,4 @@ Tracks Cloudinary media metadata separately for lifecycle management and cleanup
 - Every write operation must validate payload shape before persistence.
 - Every room-scoped operation must verify room membership.
 - CanvasObject version and updatedAt fields track change history for LWW conflict resolution.
-- RoomEvent-based traceability is not required for MVP (future bonus feature).
+- RoomEvent-based traceability is implemented as the replay foundation.

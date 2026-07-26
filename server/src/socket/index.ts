@@ -1,6 +1,7 @@
 import type { Server } from 'socket.io';
 import { authMiddleware } from './middleware/auth.js';
 import { registerRoomHandlers } from './handlers/room.js';
+import { registerRoomEventHandlers } from './handlers/roomEvents.js';
 import { registerObjectHandlers } from './handlers/objects.js';
 import { registerPhysicsHandlers } from './handlers/physics.js';
 import { registerPresenceHandlers } from './handlers/presence.js';
@@ -18,6 +19,9 @@ export function registerSocketHandlers(io: Server): void {
 
   // Register all room lifecycle handlers.
   registerRoomHandlers(io);
+
+  // Register room event journal query handlers.
+  registerRoomEventHandlers(io);
 
   // Register all object synchronization handlers.
   registerObjectHandlers(io);

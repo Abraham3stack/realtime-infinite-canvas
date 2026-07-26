@@ -2,9 +2,11 @@ import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { Stage, Layer } from 'react-konva';
 import Konva from 'konva';
 import Matter from 'matter-js';
+import type { RoomEvent } from '@realtime-canvas/shared';
 import { useViewportStore } from '../store/viewport.js';
 import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
 import { useRoomStore } from '../store/room.js';
+import { useReplayStore } from '../store/replay.js';
 import { ObjectRenderer } from './ObjectRenderer.js';
 import { MiniMapRadar } from './MiniMapRadar.js';
 import { LoadingOverlay } from './ui/LoadingOverlay.js';
@@ -56,6 +58,13 @@ interface PresenceUpdatedPayload {
   serverTs: string;
 }
 
+interface RoomEventsListResponsePayload {
+  code?: string;
+  message?: string;
+  roomId: string;
+  events: RoomEvent[];
+}
+
 type PresenceStatus = 'active' | 'idle';
 
 interface DragVelocitySample {
@@ -71,9 +80,19 @@ type OperationResult = 'ack' | 'timeout';
 
 const PHYSICS_OBJECT_TYPES: CanvasObjectType[] = ['rectangle', 'circle'];
 const PHYSICS_OBJECT_TYPE_SET = new Set<CanvasObjectType>(PHYSICS_OBJECT_TYPES);
+const DEFAULT_COLOR_BY_TYPE: Record<CanvasObjectType, string> = {
+  rectangle: '#3498db',
+  circle: '#e74c3c',
+  text: '#2c3e50',
+  'sticky-note': '#f1c40f',
+  image: '#cbd5e1',
+  audio: '#dbeafe',
+  video: '#dbeafe',
+};
 const PHYSICS_SYNC_INTERVAL_MS = 80;
 const PHYSICS_DRAG_VELOCITY_MAX = 2.5;
 const PRESENCE_SYNC_INTERVAL_MS = 120;
+const REPLAY_BASE_STEP_INTERVAL_MS = 250;
 
 function isPhysicsObjectType(type: CanvasObjectType): boolean {
   return PHYSICS_OBJECT_TYPE_SET.has(type);
@@ -455,6 +474,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [browserOnline, setBrowserOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [queuedOperationCount, setQueuedOperationCount] = useState(0);
   const [isReplayingQueue, setIsReplayingQueue] = useState(false);
+  const [isReplayPanelOpen, setIsReplayPanelOpen] = useState(false);
+  const [isReplayMode, setIsReplayMode] = useState(false);
+  const [isReplayLoading, setIsReplayLoading] = useState(false);
+  const [replayError, setReplayError] = useState<string | null>(null);
+  const [replayEvents, setReplayEvents] = useState<RoomEvent[]>([]);
+  const [isReplayPlaying, setIsReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(1);
   
   // Viewport state: pan and zoom transforms
   const { offsetX, offsetY, scale, panBy, zoomBy, setPan } = useViewportStore((s) => ({
@@ -478,6 +504,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   const participants = useRoomStore((s) => s.participants);
   const roomPhysics = usePhysicsStore((s) => s.roomPhysics);
   const setRoomPhysics = usePhysicsStore((s) => s.setRoomPhysics);
+  const replayState = useReplayStore((s) => s.currentState);
+  const replayEventCount = useReplayStore((s) => s.eventCount);
+  const initializeReplay = useReplayStore((s) => s.initialize);
+  const replayStepForward = useReplayStore((s) => s.stepForward);
+  const replayStepBackward = useReplayStore((s) => s.stepBackward);
+  const replaySeek = useReplayStore((s) => s.seek);
+  const replayReset = useReplayStore((s) => s.reset);
 
   // Tracks optimistic operations until their server echo returns.
   // This prevents duplicate application of local writes while preserving all
@@ -507,11 +540,140 @@ export const Canvas: React.FC<CanvasProps> = ({
   const offlineQueue = useMemo(() => getOfflineOperationsQueue(), []);
 
   const canSendRealtimeOperation = Boolean(room && socketConnected && browserOnline);
+  const replayCurrentPosition = replayState.appliedEventCount;
+  const replayProgress = replayEventCount > 0 ? replayCurrentPosition / replayEventCount : 0;
+  const replayCurrentEvent = replayCurrentPosition > 0 ? replayEvents[replayCurrentPosition - 1] ?? null : null;
+  const displayedObjects = useMemo<CanvasObject[]>(() => {
+    if (!isReplayMode) return objects;
+
+    return replayState.objects.map((object) => ({
+      ...object,
+      rotation: typeof object.rotation === 'number' ? object.rotation : 0,
+      zIndex: typeof object.zIndex === 'number' ? object.zIndex : 0,
+      color: typeof object.color === 'string' && object.color.length > 0
+        ? object.color
+        : DEFAULT_COLOR_BY_TYPE[object.type] ?? '#3498db',
+    }));
+  }, [isReplayMode, objects, replayState.objects]);
 
   const isPhysicsAuthority = useMemo(() => {
     if (!room?.createdBySessionId || !sessionId) return false;
     return room.createdBySessionId === sessionId;
   }, [room?.createdBySessionId, sessionId]);
+
+  const loadReplayEvents = useCallback(async (): Promise<RoomEvent[]> => {
+    if (!room) return [];
+
+    const response = await new Promise<RoomEventsListResponsePayload>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        reject(new Error('Timed out loading room events'));
+      }, 12000);
+
+      socket.emit('room:events:list', { roomId: room.id }, (payload: RoomEventsListResponsePayload) => {
+        window.clearTimeout(timeout);
+        resolve(payload);
+      });
+    });
+
+    if (response.code) {
+      throw new Error(response.message || response.code);
+    }
+
+    return response.events ?? [];
+  }, [room]);
+
+  const enterReplayMode = useCallback(async () => {
+    if (!room || isReplayLoading) return;
+
+    setIsReplayPanelOpen(true);
+    setIsReplayLoading(true);
+    setReplayError(null);
+
+    try {
+      const events = await loadReplayEvents();
+      setReplayEvents(events);
+      initializeReplay(events);
+      replayReset();
+      setIsReplayMode(true);
+      setIsReplayPlaying(false);
+      setSelectedObjectId(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load replay events';
+      setReplayError(message);
+      setIsReplayMode(false);
+    } finally {
+      setIsReplayLoading(false);
+    }
+  }, [initializeReplay, isReplayLoading, loadReplayEvents, replayReset, room]);
+
+  const exitReplayMode = useCallback(() => {
+    setIsReplayMode(false);
+    setIsReplayPlaying(false);
+    setReplayError(null);
+    setSelectedObjectId(null);
+  }, []);
+
+  const handleReplayStepForward = useCallback(() => {
+    if (!isReplayMode) return;
+    replayStepForward();
+  }, [isReplayMode, replayStepForward]);
+
+  const handleReplayStepBackward = useCallback(() => {
+    if (!isReplayMode) return;
+    replayStepBackward();
+  }, [isReplayMode, replayStepBackward]);
+
+  const handleReplayRestart = useCallback(() => {
+    if (!isReplayMode) return;
+    replayReset();
+    setIsReplayPlaying(false);
+  }, [isReplayMode, replayReset]);
+
+  const handleReplaySeek = useCallback((position: number) => {
+    if (!isReplayMode) return;
+    replaySeek(position);
+  }, [isReplayMode, replaySeek]);
+
+  const handleReplayPanelToggle = useCallback(async () => {
+    if (!isReplayPanelOpen) {
+      await enterReplayMode();
+      return;
+    }
+
+    setIsReplayPanelOpen(false);
+    exitReplayMode();
+  }, [enterReplayMode, exitReplayMode, isReplayPanelOpen]);
+
+  useEffect(() => {
+    if (!isReplayMode || !isReplayPlaying) return;
+    if (replayCurrentPosition >= replayEventCount) {
+      setIsReplayPlaying(false);
+      return;
+    }
+
+    const intervalMs = Math.max(16, Math.round(REPLAY_BASE_STEP_INTERVAL_MS / replaySpeed));
+    const timer = window.setInterval(() => {
+      const state = useReplayStore.getState();
+      if (state.currentState.appliedEventCount >= state.eventCount) {
+        window.clearInterval(timer);
+        setIsReplayPlaying(false);
+        return;
+      }
+      state.stepForward();
+    }, intervalMs);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isReplayMode, isReplayPlaying, replayCurrentPosition, replayEventCount, replaySpeed]);
+
+  useEffect(() => {
+    setIsReplayPlaying(false);
+    setIsReplayMode(false);
+    setIsReplayPanelOpen(false);
+    setReplayEvents([]);
+    setReplayError(null);
+  }, [room?.id]);
 
   const pinnedSet = useMemo(() => new Set(roomPhysics.staticObjectIds), [roomPhysics.staticObjectIds]);
   const physicsStructureSignature = useMemo(() => {
@@ -633,7 +795,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [generateOperationId, offlineQueue, refreshQueueCount, room, sessionId]);
 
   const emitCreate = useCallback((object: CanvasObject) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     if (!canSendRealtimeOperation) {
       enqueueCreate(object);
@@ -647,10 +809,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       roomId: room.id,
       object,
     });
-  }, [canSendRealtimeOperation, enqueueCreate, generateOperationId, room]);
+  }, [canSendRealtimeOperation, enqueueCreate, generateOperationId, isReplayMode, room]);
 
   const emitUpdate = useCallback((objectId: string, updates: Record<string, unknown>) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     if (!canSendRealtimeOperation) {
       enqueueUpdate(objectId, updates);
@@ -665,10 +827,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       objectId,
       updates,
     });
-  }, [canSendRealtimeOperation, enqueueUpdate, generateOperationId, room]);
+  }, [canSendRealtimeOperation, enqueueUpdate, generateOperationId, isReplayMode, room]);
 
   const emitDelete = useCallback((objectId: string) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     if (!canSendRealtimeOperation) {
       enqueueDelete(objectId);
@@ -682,34 +844,40 @@ export const Canvas: React.FC<CanvasProps> = ({
       roomId: room.id,
       objectId,
     });
-  }, [canSendRealtimeOperation, enqueueDelete, generateOperationId, room]);
+  }, [canSendRealtimeOperation, enqueueDelete, generateOperationId, isReplayMode, room]);
 
   const emitPhysicsStatePatch = useCallback((patch: Partial<RoomPhysicsState>) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
+    const operationId = generateOperationId();
     socket.emit('physics:update-state', {
+      operationId,
       roomId: room.id,
       patch,
     });
-  }, [room]);
+  }, [generateOperationId, isReplayMode, room]);
 
   const emitPhysicsSetStatic = useCallback((objectId: string, isStatic: boolean) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
+    const operationId = generateOperationId();
     socket.emit('physics:set-static', {
+      operationId,
       roomId: room.id,
       objectId,
       isStatic,
     });
-  }, [room]);
+  }, [generateOperationId, isReplayMode, room]);
 
   const emitPhysicsReset = useCallback(() => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
+    const operationId = generateOperationId();
     socket.emit('physics:reset', {
+      operationId,
       roomId: room.id,
     });
-  }, [room]);
+  }, [generateOperationId, isReplayMode, room]);
 
   const createObjectAndSync = useCallback((type: CanvasObjectType) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     // Objects are created at viewport center in world-space so creation remains
     // predictable regardless of current pan/zoom.
@@ -722,10 +890,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     setActiveTool(type);
     setSelectedObjectId(id);
     emitCreate(object);
-  }, [addObject, emitCreate, offsetX, offsetY, room, scale, stageSize]);
+  }, [addObject, emitCreate, isReplayMode, offsetX, offsetY, room, scale, stageSize]);
 
   const createMediaObjectsAndSync = useCallback((uploads: UploadedMedia[]) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     const center = canvasCenterToWorld(stageSize, { offsetX, offsetY, scale });
 
@@ -761,9 +929,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (createdIds.length > 0) {
       setSelectedObjectId(createdIds[createdIds.length - 1]);
     }
-  }, [addMediaObject, emitCreate, offsetX, offsetY, room, scale, sessionId, stageSize]);
+  }, [addMediaObject, emitCreate, isReplayMode, offsetX, offsetY, room, scale, sessionId, stageSize]);
 
   const runMediaUpload = useCallback(async (mediaType: MediaUploadType, files: File[]) => {
+    if (isReplayMode) {
+      onNotify?.('Exit replay mode to upload media.');
+      return;
+    }
+
     if (!room) {
       onNotify?.('Join a room before uploading media');
       return;
@@ -812,14 +985,15 @@ export const Canvas: React.FC<CanvasProps> = ({
       setUploadLabel(null);
       setUploadProgress(0);
     }
-  }, [browserOnline, createMediaObjectsAndSync, onNotify, room, sessionToken, socketConnected, uploadInProgress]);
+  }, [browserOnline, createMediaObjectsAndSync, isReplayMode, onNotify, room, sessionToken, socketConnected, uploadInProgress]);
 
   const openUploadPicker = useCallback((mediaType: MediaUploadType) => {
+    if (isReplayMode) return;
     if (uploadInProgress) return;
     if (mediaType === 'image') imageUploadInputRef.current?.click();
     if (mediaType === 'audio') audioUploadInputRef.current?.click();
     if (mediaType === 'video') videoUploadInputRef.current?.click();
-  }, [uploadInProgress]);
+  }, [isReplayMode, uploadInProgress]);
 
   const handlePickerChanged = useCallback(async (mediaType: MediaUploadType, files: FileList | null) => {
     const nextFiles = files ? Array.from(files) : [];
@@ -935,15 +1109,17 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [downloadBlob, objects, onNotify, room?.id]);
 
   const deleteObjectAndSync = useCallback((objectId: string) => {
+    if (isReplayMode) return;
     deleteObject(objectId);
     if (selectedObjectId === objectId) {
       setSelectedObjectId(null);
     }
     emitDelete(objectId);
     onObjectDeleted?.();
-  }, [deleteObject, emitDelete, onObjectDeleted, selectedObjectId]);
+  }, [deleteObject, emitDelete, isReplayMode, onObjectDeleted, selectedObjectId]);
 
   const moveObjectAndSync = useCallback((objectId: string, x: number, y: number) => {
+    if (isReplayMode) return;
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
     if (!existing) return;
 
@@ -985,9 +1161,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     updateObject(objectId, { x, y });
     emitUpdate(objectId, { x, y });
-  }, [emitUpdate, isPhysicsAuthority, roomPhysics.enabled, updateObject]);
+  }, [emitUpdate, isPhysicsAuthority, isReplayMode, roomPhysics.enabled, updateObject]);
 
   const resizeObjectAndSync = useCallback((objectId: string, width: number, height: number) => {
+    if (isReplayMode) return;
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
     if (!existing) return;
 
@@ -996,7 +1173,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     updateObject(objectId, { width, height });
     emitUpdate(objectId, { width, height });
-  }, [emitUpdate, updateObject]);
+  }, [emitUpdate, isReplayMode, updateObject]);
 
   const handleObjectDragStart = useCallback((objectId: string) => {
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
@@ -1358,7 +1535,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Keyboard shortcuts for object creation
   useEffect(() => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement as HTMLElement | null;
@@ -1393,7 +1570,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createObjectAndSync, room]);
+  }, [createObjectAndSync, isReplayMode, room]);
 
   // Subscriptions are attached only while in-room so handlers cannot leak across
   // room transitions.
@@ -1495,7 +1672,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [refreshQueueCount]);
 
   const replayOfflineQueue = useCallback(async () => {
-    if (!room || !socketConnected || !browserOnline) return;
+    if (!room || !socketConnected || !browserOnline || isReplayMode) return;
     if (isReplayingQueueRef.current) return;
 
     const queued = offlineQueue.list(room.id, sessionId);
@@ -1539,10 +1716,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (blockedByTimeout) {
       onNotify?.('Some queued changes could not be confirmed yet and will retry automatically.');
     }
-  }, [browserOnline, emitQueuedOperation, offlineQueue, onNotify, refreshQueueCount, room, sessionId, socketConnected, waitForOperationAck]);
+  }, [browserOnline, emitQueuedOperation, isReplayMode, offlineQueue, onNotify, refreshQueueCount, room, sessionId, socketConnected, waitForOperationAck]);
 
   useEffect(() => {
-    if (!room || !socketConnected || !browserOnline) return;
+    if (!room || !socketConnected || !browserOnline || isReplayMode) return;
     if (queueReplayTimerRef.current !== null) {
       window.clearTimeout(queueReplayTimerRef.current);
     }
@@ -1552,7 +1729,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       queueReplayTimerRef.current = null;
       void replayOfflineQueue();
     }, 350);
-  }, [browserOnline, replayOfflineQueue, room, socketConnected]);
+  }, [browserOnline, isReplayMode, replayOfflineQueue, room, socketConnected]);
 
   useEffect(() => {
     if (!room) return;
@@ -1586,7 +1763,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [room, setRoomPhysics]);
 
   const emitPresenceSnapshot = useCallback((status: PresenceStatus) => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
     socket.emit('presence:update', {
       roomId: room.id,
       status,
@@ -1599,10 +1776,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       },
     });
     presenceSyncRef.current.lastSentAt = Date.now();
-  }, [offsetX, offsetY, room, scale, stageSize.height, stageSize.width]);
+  }, [isReplayMode, offsetX, offsetY, room, scale, stageSize.height, stageSize.width]);
 
   useEffect(() => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     const now = Date.now();
     const elapsed = now - presenceSyncRef.current.lastSentAt;
@@ -1623,10 +1800,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         emitPresenceSnapshot('active');
       }, remaining);
     }
-  }, [emitPresenceSnapshot, room]);
+  }, [emitPresenceSnapshot, isReplayMode, room]);
 
   useEffect(() => {
-    if (!room) return;
+    if (!room || isReplayMode) return;
 
     const handleVisibilityChange = () => {
       emitPresenceSnapshot(document.visibilityState === 'hidden' ? 'idle' : 'active');
@@ -1636,7 +1813,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [emitPresenceSnapshot, room]);
+  }, [emitPresenceSnapshot, isReplayMode, room]);
 
   // Update stage size on mount and resize
   useEffect(() => {
@@ -1792,8 +1969,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   const selectedObject = useMemo(() => {
     if (!selectedObjectId) return null;
-    return objects.find((object) => object.id === selectedObjectId) ?? null;
-  }, [objects, selectedObjectId]);
+    return displayedObjects.find((object) => object.id === selectedObjectId) ?? null;
+  }, [displayedObjects, selectedObjectId]);
 
   const selectedObjectSupportsPhysics = Boolean(selectedObject && isPhysicsObjectType(selectedObject.type));
   const selectedObjectIsPinned = Boolean(selectedObject && pinnedSet.has(selectedObject.id));
@@ -1853,6 +2030,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               type="button"
               className={activeTool === tool.type ? 'tool-btn active' : 'tool-btn'}
               onClick={() => createObjectAndSync(tool.type)}
+              disabled={isReplayMode}
               title={`${tool.label} (${tool.hotkey})`}
               aria-label={`${tool.label} (${tool.hotkey})`}
             >
@@ -1863,7 +2041,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => openUploadPicker('image')}
-            disabled={uploadInProgress}
+            disabled={uploadInProgress || isReplayMode}
             title="Upload Image"
             aria-label="Upload image"
           >
@@ -1873,7 +2051,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => openUploadPicker('audio')}
-            disabled={uploadInProgress}
+            disabled={uploadInProgress || isReplayMode}
             title="Upload Audio"
             aria-label="Upload audio"
           >
@@ -1883,7 +2061,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => openUploadPicker('video')}
-            disabled={uploadInProgress}
+            disabled={uploadInProgress || isReplayMode}
             title="Upload Video"
             aria-label="Upload video"
           >
@@ -1893,6 +2071,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={handleExportPng}
+            disabled={isReplayMode}
             title="Export PNG"
             aria-label="Export PNG"
           >
@@ -1902,6 +2081,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={handleExportSvg}
+            disabled={isReplayMode}
             title="Export SVG"
             aria-label="Export SVG"
           >
@@ -1911,10 +2091,22 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={handleExportJson}
+            disabled={isReplayMode}
             title="Export JSON"
             aria-label="Export JSON"
           >
             <span aria-hidden="true">JSON</span>
+          </button>
+          <button
+            type="button"
+            className={isReplayMode ? 'tool-btn active' : 'tool-btn'}
+            onClick={() => {
+              void handleReplayPanelToggle();
+            }}
+            title={isReplayMode ? 'Exit Replay Mode' : 'Open Replay Panel'}
+            aria-label={isReplayMode ? 'Exit replay mode' : 'Open replay panel'}
+          >
+            <span aria-hidden="true">RPL</span>
           </button>
         </div>
         <div className="toolbar-meta">
@@ -1922,6 +2114,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className={roomPhysics.enabled ? 'tool-btn active' : 'tool-btn'}
             onClick={handleTogglePhysicsMode}
+            disabled={isReplayMode}
             aria-label="Toggle physics mode"
             aria-pressed={roomPhysics.enabled}
             title="Physics mode"
@@ -1932,7 +2125,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={handleToggleSimulation}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Toggle physics simulation"
             aria-pressed={roomPhysics.simulationRunning}
             title={roomPhysics.simulationRunning ? 'Pause simulation' : 'Resume simulation'}
@@ -1943,7 +2136,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => handleAdjustGravity(-0.1)}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Decrease gravity"
             title="Decrease gravity"
           >
@@ -1953,7 +2146,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => handleAdjustGravity(0.1)}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Increase gravity"
             title="Increase gravity"
           >
@@ -1963,7 +2156,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => handleAdjustRestitution(-0.05)}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Decrease restitution"
             title="Decrease restitution"
           >
@@ -1973,7 +2166,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => handleAdjustRestitution(0.05)}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Increase restitution"
             title="Increase restitution"
           >
@@ -1983,7 +2176,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => handleAdjustFrictionAir(-0.005)}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Decrease friction"
             title="Decrease friction"
           >
@@ -1993,7 +2186,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={() => handleAdjustFrictionAir(0.005)}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Increase friction"
             title="Increase friction"
           >
@@ -2003,7 +2196,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={handleTogglePinned}
-            disabled={!roomPhysics.enabled || !selectedObjectSupportsPhysics}
+            disabled={!roomPhysics.enabled || !selectedObjectSupportsPhysics || isReplayMode}
             aria-label="Toggle static object"
             aria-pressed={selectedObjectIsPinned}
             title={selectedObjectIsPinned ? 'Unpin selected object' : 'Pin selected object'}
@@ -2014,7 +2207,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             type="button"
             className="tool-btn"
             onClick={handleResetPhysics}
-            disabled={!roomPhysics.enabled}
+            disabled={!roomPhysics.enabled || isReplayMode}
             aria-label="Reset physics simulation"
             title="Reset physics simulation"
           >
@@ -2043,6 +2236,11 @@ export const Canvas: React.FC<CanvasProps> = ({
               {isPhysicsAuthority ? 'Physics Host' : 'Physics Follower'} | g {roomPhysics.gravityY.toFixed(1)} | b {roomPhysics.restitution.toFixed(2)} | f {roomPhysics.frictionAir.toFixed(3)}
             </span>
           ) : null}
+          {isReplayMode ? (
+            <span className="users-chip users-chip--replay" aria-label="Replay mode enabled">
+              Replay Mode
+            </span>
+          ) : null}
           {uploadInProgress && uploadLabel ? (
             <span className="users-chip users-chip--loading" aria-label="Upload in progress">
               {uploadLabel} {uploadProgress}%
@@ -2055,13 +2253,14 @@ export const Canvas: React.FC<CanvasProps> = ({
               onClick={() => {
                 void runMediaUpload(failedUpload.mediaType, failedUpload.files);
               }}
+              disabled={isReplayMode}
               aria-label="Retry failed upload"
               title={failedUpload.message}
             >
               Retry Upload
             </button>
           ) : null}
-          {selectedObjectId && (
+          {selectedObjectId && !isReplayMode && (
             <button
               type="button"
               className="delete-btn"
@@ -2074,6 +2273,104 @@ export const Canvas: React.FC<CanvasProps> = ({
           )}
         </div>
       </div>
+
+      {isReplayPanelOpen ? (
+        <aside className="replay-panel" aria-label="Replay controls panel">
+          <div className="replay-panel__header">
+            <div>
+              <p className="replay-panel__eyebrow">Replay</p>
+              <h3 className="replay-panel__title">Room Event Playback</h3>
+            </div>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void handleReplayPanelToggle();
+              }}
+            >
+              {isReplayMode ? 'Exit Replay' : 'Close'}
+            </button>
+          </div>
+
+          {isReplayLoading ? (
+            <p className="replay-panel__status">Loading event history...</p>
+          ) : null}
+          {replayError ? <p className="inline-error">{replayError}</p> : null}
+
+          {isReplayMode ? (
+            <>
+              <div className="replay-panel__controls">
+                <button type="button" className="tool-btn" onClick={() => setIsReplayPlaying(true)} disabled={isReplayPlaying || replayCurrentPosition >= replayEventCount} aria-label="Play replay">
+                  Play
+                </button>
+                <button type="button" className="tool-btn" onClick={() => setIsReplayPlaying(false)} disabled={!isReplayPlaying} aria-label="Pause replay">
+                  Pause
+                </button>
+                <button type="button" className="tool-btn" onClick={handleReplayRestart} aria-label="Restart replay">
+                  Restart
+                </button>
+                <button type="button" className="tool-btn" onClick={handleReplayStepBackward} disabled={replayCurrentPosition <= 0} aria-label="Step backward">
+                  Step -
+                </button>
+                <button type="button" className="tool-btn" onClick={handleReplayStepForward} disabled={replayCurrentPosition >= replayEventCount} aria-label="Step forward">
+                  Step +
+                </button>
+                <label className="replay-panel__speed" htmlFor="replay-speed-select">
+                  Speed
+                  <select
+                    id="replay-speed-select"
+                    className="replay-panel__speed-select"
+                    value={replaySpeed}
+                    onChange={(event) => setReplaySpeed(Number(event.target.value))}
+                  >
+                    <option value={0.25}>0.25x</option>
+                    <option value={0.5}>0.5x</option>
+                    <option value={1}>1x</option>
+                    <option value={2}>2x</option>
+                    <option value={4}>4x</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="replay-panel__timeline-wrap">
+                <div className="replay-panel__timeline-meta">
+                  <span>Event {replayCurrentPosition} / {replayEventCount}</span>
+                  <span>{Math.round(replayProgress * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  className="replay-panel__timeline"
+                  min={0}
+                  max={Math.max(0, replayEventCount)}
+                  step={1}
+                  value={replayCurrentPosition}
+                  onChange={(event) => {
+                    setIsReplayPlaying(false);
+                    handleReplaySeek(Number(event.target.value));
+                  }}
+                  aria-label="Replay timeline scrubber"
+                />
+                <progress className="replay-panel__progress" value={replayCurrentPosition} max={Math.max(1, replayEventCount)} />
+              </div>
+
+              <div className="replay-panel__event-meta">
+                <p><strong>Event Type:</strong> {replayCurrentEvent?.eventType ?? 'None'}</p>
+                <p><strong>Sequence:</strong> {replayCurrentEvent?.sequenceNumber ?? '-'}</p>
+                <p><strong>Timestamp:</strong> {replayCurrentEvent?.createdAt ? new Date(replayCurrentEvent.createdAt).toLocaleString() : '-'}</p>
+                <p><strong>Playback:</strong> {replaySpeed}x</p>
+              </div>
+            </>
+          ) : (
+            <p className="replay-panel__status">Open replay mode to inspect deterministic event playback.</p>
+          )}
+        </aside>
+      ) : null}
+
+      {isReplayMode ? (
+        <div className="replay-mode-banner" role="status" aria-label="Replay mode indicator">
+          Replay Mode Active: canvas is rendering replay state only.
+        </div>
+      ) : null}
 
       {loadingPhase && loadingCopy ? <LoadingOverlay message={loadingCopy.title} subMessage={loadingCopy.sub} /> : null}
 
@@ -2099,19 +2396,30 @@ export const Canvas: React.FC<CanvasProps> = ({
         }}
       >
         <Layer>
-          {objects.map((obj) => (
+          {displayedObjects.map((obj) => (
             <ObjectRenderer
               key={obj.id}
               object={obj}
               selected={selectedObjectId === obj.id}
-              draggable={!(roomPhysics.enabled && roomPhysics.simulationRunning && isPhysicsObjectType(obj.type) && pinnedSet.has(obj.id))}
-              onDragStart={() => handleObjectDragStart(obj.id)}
-              onDragMove={(x, y) => handleObjectDragMove(obj.id, x, y)}
+              draggable={isReplayMode ? false : !(roomPhysics.enabled && roomPhysics.simulationRunning && isPhysicsObjectType(obj.type) && pinnedSet.has(obj.id))}
+              onDragStart={() => {
+                if (isReplayMode) return;
+                handleObjectDragStart(obj.id);
+              }}
+              onDragMove={(x, y) => {
+                if (isReplayMode) return;
+                handleObjectDragMove(obj.id, x, y);
+              }}
               onMove={(x, y) => {
+                if (isReplayMode) return;
                 moveObjectAndSync(obj.id, x, y);
               }}
-              onDelete={() => deleteObjectAndSync(obj.id)}
+              onDelete={() => {
+                if (isReplayMode) return;
+                deleteObjectAndSync(obj.id);
+              }}
               onResize={(width, height) => {
+                if (isReplayMode) return;
                 resizeObjectAndSync(obj.id, width, height);
               }}
             />
@@ -2120,7 +2428,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       </Stage>
 
       <MiniMapRadar
-        objects={objects}
+        objects={displayedObjects}
         participants={participants}
         currentSessionId={sessionId}
         viewport={{ offsetX, offsetY, scale }}

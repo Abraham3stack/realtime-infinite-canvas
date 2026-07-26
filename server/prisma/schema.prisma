@@ -39,6 +39,7 @@ model GuestSession {
   user         GuestUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
   rooms        Room[]
   participants RoomParticipant[]
+  roomEvents   RoomEvent[]
 }
 
 // ---------------------------------------------------------------------------
@@ -51,12 +52,14 @@ model Room {
   shareCode          String   @unique
   createdBySessionId String
   title              String?
+  eventSequenceNumber Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   createdBy     GuestSession      @relation(fields: [createdBySessionId], references: [id])
   participants  RoomParticipant[]
   canvasObjects CanvasObject[]
+  roomEvents    RoomEvent[]
 }
 
 // Tracks membership and the last known viewport of each participant.
@@ -131,4 +134,25 @@ model CanvasObject {
   deletedAt DateTime?
 
   room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model RoomEvent {
+  id                String   @id @default(uuid())
+  roomId            String
+  sequenceNumber    Int
+  operationId       String
+  actorSessionId    String
+  actorDisplayName  String
+  eventType         String
+  payload           Json
+  schemaVersion     Int      @default(1)
+  createdAt         DateTime @default(now())
+
+  room         Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  actorSession  GuestSession @relation(fields: [actorSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, sequenceNumber])
+  @@unique([roomId, operationId])
+  @@index([roomId, createdAt])
+  @@index([roomId, eventType])
 }

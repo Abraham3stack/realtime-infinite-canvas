@@ -204,6 +204,49 @@ Canvas toolbar includes:
 
 SVG export uses Konva's native stage serialization, so supported shapes and text stay vector-based and scale cleanly. Image and media nodes are included when the rendering library can serialize their sources.
 
+## Room Event Journal
+
+The replay foundation now uses an append-only RoomEvent journal.
+
+- Successful object and user-initiated physics mutations are recorded after validation succeeds.
+- Event ordering is server-generated with room-scoped sequence numbers.
+- A dedicated socket API returns ordered room history for future replay consumers.
+- Current room hydration still uses the existing snapshot path; replay UI is not part of this phase.
+
+## Replay Engine (Phase 2.2)
+
+An isolated in-memory replay subsystem now reconstructs room state deterministically from ordered RoomEvent history.
+
+- Rebuilds object state from `object:create`, `object:update`, and `object:delete` events only.
+- Rebuilds physics replay state from user-initiated physics journal events.
+- Supports deterministic stepping APIs: initialize, step forward, step backward, reset, and read current state.
+- Ignores snapshot hydration for reconstruction, so replay output is event-sequence driven.
+- Does not mutate live collaboration stores, socket transport, persistence flow, or offline queue behavior.
+
+Current scope:
+
+- Replay engine logic and deterministic tests are implemented.
+- Replay UI is implemented in the client canvas layer with:
+  - replay panel transport controls (play, pause, restart, step forward/backward)
+  - speed controls (0.25x, 0.5x, 1x, 2x, 4x)
+  - timeline scrubber with click/drag seek
+  - current-event metadata display (event type, sequence, timestamp)
+  - replay-mode visual indicators and toolbar state changes
+
+Replay UI isolation behavior:
+
+- During replay mode, live canvas mutations are blocked (create/move/resize/delete/upload).
+- During replay mode, realtime emits/offline queue replay and presence emission are suppressed.
+- Replay rendering uses replay-engine state only and exits cleanly back to live room state.
+
+Final validation status:
+
+- Replay parity validated against live room hydration snapshot using real `room:events:list` history.
+- Large-journal replay validation completed with 500+ events and repeated-run deterministic output checks.
+- Real-browser replay verification completed (live room vs replay-rendered state parity).
+- Isolation verification completed (replay does not mutate live stores, socket transport, journal, or offline queue).
+- Evidence artifacts captured at `docs/validation/evidence/replay_final_validation_2026-07-26T12-52-54-115Z/summary.json`.
+
 ## Physics System (Phase 5)
 
 Physics mode is implemented with Matter.js and synchronized across collaborators.

@@ -9,6 +9,14 @@
 import { CanvasObject, CanvasObjectPatch } from './canvas.js';
 import { RoomState, Presence, Viewport, RoomParticipant } from './room.js';
 
+export type RoomEventType =
+  | 'object:create'
+  | 'object:update'
+  | 'object:delete'
+  | 'physics:update-state'
+  | 'physics:set-static'
+  | 'physics:reset';
+
 // Error response
 export interface ErrorResponse {
   code: string;
@@ -183,4 +191,28 @@ export interface SyncErrorPayload {
   operationId?: string;
   error: ErrorResponse;
   recoverable: boolean;
+}
+
+// Append-only room journal records used as the foundation for future replay.
+export interface RoomEvent {
+  id: string;
+  roomId: string;
+  sequenceNumber: number;
+  operationId: string;
+  actorSessionId: string;
+  actorDisplayName: string;
+  eventType: RoomEventType;
+  payload: Record<string, unknown>;
+  schemaVersion: number;
+  createdAt: Date;
+}
+
+export interface RoomEventsListRequest {
+  roomId: string;
+  afterSequenceNumber?: number;
+}
+
+export interface RoomEventsListResponse {
+  roomId: string;
+  events: RoomEvent[];
 }

@@ -2,6 +2,8 @@ import type { Server, Socket } from 'socket.io';
 import type { CanvasObject as PrismaCanvasObject, Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import type { AuthenticatedSocket } from '../types.js';
+import type { RoomEventType } from '@realtime-canvas/shared';
+import { appendRoomEvent, ROOM_EVENT_SCHEMA_VERSION, type RoomEventJournalEntry } from '../../journal/roomEvents.js';
 
 // Type definitions for object event payloads
 interface ObjectCreatePayload {
@@ -24,6 +26,122 @@ interface ObjectDeletePayload {
 }
 
 type ClientCanvasObjectType = 'rectangle' | 'circle' | 'text' | 'sticky-note' | 'image' | 'audio' | 'video';
+
+const CLIENT_OBJECT_TYPES = new Set<ClientCanvasObjectType>([
+  'rectangle',
+  'circle',
+  'text',
+  'sticky-note',
+  'image',
+  'audio',
+  'video',
+]);
+
+const MIN_DIMENSION = 1;
+const MAX_DIMENSION = 10000;
+const MIN_RADIUS = 0.5;
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function sanitizeDimension(value: number | null | undefined, fallback: number): number {
+  if (!isFiniteNumber(value)) return fallback;
+  return Math.max(MIN_DIMENSION, Math.min(MAX_DIMENSION, value));
+}
+
+function sanitizeCoordinate(value: number | null | undefined, fallback = 0): number {
+  if (!isFiniteNumber(value)) return fallback;
+  return value;
+}
+
+function sanitizeRotation(value: number | null | undefined): number {
+  if (!isFiniteNumber(value)) return 0;
+  return value;
+}
+
+function sanitizeZIndex(value: number | null | undefined): number {
+  if (!isFiniteNumber(value)) return 0;
+  return Math.trunc(value);
+}
+
+function isValidClientObjectType(type: unknown): type is ClientCanvasObjectType {
+  return typeof type === 'string' && CLIENT_OBJECT_TYPES.has(type as ClientCanvasObjectType);
+}
+
+function isValidPositiveDimension(value: unknown): boolean {
+  return isFiniteNumber(value) && value > 0;
+}
+
+function isValidObjectGeometry(object: ClientCanvasObject): boolean {
+  if (!isValidClientObjectType(object.type)) return false;
+  if (!isFiniteNumber(object.x) || !isFiniteNumber(object.y)) return false;
+  if (!isFiniteNumber(object.rotation)) return false;
+  if (!Number.isInteger(object.zIndex)) return false;
+  if (!isValidPositiveDimension(object.width) || !isValidPositiveDimension(object.height)) return false;
+
+  if (object.type === 'circle') {
+    const radius = Math.min(object.width, object.height) / 2;
+    if (!isFiniteNumber(radius) || radius < MIN_RADIUS) {
+      return false;
+    }
+  }
+
+  if (object.fontSize !== undefined && (!isFiniteNumber(object.fontSize) || object.fontSize <= 0)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isValidUpdatePayload(updates: Record<string, unknown>): boolean {
+  if ('x' in updates && !isFiniteNumber(updates.x)) return false;
+  if ('y' in updates && !isFiniteNumber(updates.y)) return false;
+  if ('rotation' in updates && !isFiniteNumber(updates.rotation)) return false;
+  if ('zIndex' in updates && (!isFiniteNumber(updates.zIndex) || !Number.isInteger(updates.zIndex))) return false;
+  if ('width' in updates && !isValidPositiveDimension(updates.width)) return false;
+  if ('height' in updates && !isValidPositiveDimension(updates.height)) return false;
+  if ('fontSize' in updates && (!isFiniteNumber(updates.fontSize) || updates.fontSize <= 0)) return false;
+  if ('mediaWidth' in updates && !isValidPositiveDimension(updates.mediaWidth)) return false;
+  if ('mediaHeight' in updates && !isValidPositiveDimension(updates.mediaHeight)) return false;
+  if ('sizeBytes' in updates && (!isFiniteNumber(updates.sizeBytes) || updates.sizeBytes < 0)) return false;
+  if ('durationMs' in updates && (!isFiniteNumber(updates.durationMs) || updates.durationMs < 0)) return false;
+
+  return true;
+}
+
+function isValidObjectAfterUpdate(existing: PrismaCanvasObject, data: Prisma.CanvasObjectUpdateInput): boolean {
+  const width = isFiniteNumber(data.width)
+    ? data.width
+    : isFiniteNumber(existing.width)
+      ? existing.width
+      : 100;
+  const height = isFiniteNumber(data.height)
+    ? data.height
+    : isFiniteNumber(existing.height)
+      ? existing.height
+      : 100;
+  const x = isFiniteNumber(data.x) ? data.x : existing.x;
+  const y = isFiniteNumber(data.y) ? data.y : existing.y;
+  const rotation = isFiniteNumber(data.rotation)
+    ? data.rotation
+    : isFiniteNumber(existing.rotation)
+      ? existing.rotation
+      : 0;
+
+  if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(rotation)) return false;
+  if (!isValidPositiveDimension(width) || !isValidPositiveDimension(height)) return false;
+
+  const nextType = existing.shapeType === 'circle' || existing.type === 'circle' ? 'circle' : 'other';
+  if (nextType === 'circle') {
+    const radius = Math.min(width, height) / 2;
+    if (!isFiniteNumber(radius) || radius < MIN_RADIUS) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 interface ClientCanvasObject {
   [key: string]: unknown;
@@ -74,10 +192,21 @@ function isClientCanvasObject(value: Record<string, unknown>): value is ClientCa
 }
 
 export interface ObjectRepository {
-  createObject: (data: Prisma.CanvasObjectUncheckedCreateInput) => Promise<PrismaCanvasObject>;
+  createObject: (
+    data: Prisma.CanvasObjectUncheckedCreateInput,
+    journalEntry?: RoomEventJournalEntry
+  ) => Promise<PrismaCanvasObject>;
   findObject: (roomId: string, objectId: string) => Promise<PrismaCanvasObject | null>;
-  updateObject: (objectId: string, data: Prisma.CanvasObjectUpdateInput) => Promise<PrismaCanvasObject>;
-  deleteObject: (roomId: string, objectId: string) => Promise<number>;
+  updateObject: (
+    objectId: string,
+    data: Prisma.CanvasObjectUpdateInput,
+    journalEntry?: RoomEventJournalEntry
+  ) => Promise<PrismaCanvasObject>;
+  deleteObject: (
+    roomId: string,
+    objectId: string,
+    journalEntry?: RoomEventJournalEntry
+  ) => Promise<number>;
   getRoomObjects: (roomId: string) => Promise<PrismaCanvasObject[]>;
 }
 
@@ -95,14 +224,21 @@ export interface ObjectRepository {
  */
 
 function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
+  if (!row.id || typeof row.id !== 'string') {
+    return null;
+  }
+
+  const safeWidth = sanitizeDimension(row.width, 100);
+  const safeHeight = sanitizeDimension(row.height, 100);
+
   const base = {
     id: row.id,
-    x: row.x,
-    y: row.y,
-    width: row.width ?? 100,
-    height: row.height ?? 100,
-    rotation: row.rotation ?? 0,
-    zIndex: row.zIndex,
+    x: sanitizeCoordinate(row.x),
+    y: sanitizeCoordinate(row.y),
+    width: safeWidth,
+    height: safeHeight,
+    rotation: sanitizeRotation(row.rotation),
+    zIndex: sanitizeZIndex(row.zIndex),
     createdBySessionId: row.createdBySessionId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -129,7 +265,7 @@ function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
         type: 'text',
         color: row.color ?? '#2c3e50',
         text: row.content ?? 'Text',
-        fontSize: row.fontSize ?? 14,
+        fontSize: sanitizeDimension(row.fontSize, 14),
       };
     }
     case 'sticky': {
@@ -138,7 +274,7 @@ function toClientObject(row: PrismaCanvasObject): ClientCanvasObject | null {
         type: 'sticky-note',
         color: row.backgroundColor ?? '#f1c40f',
         text: row.content ?? 'Note',
-        fontSize: row.fontSize ?? 12,
+        fontSize: sanitizeDimension(row.fontSize, 12),
       };
     }
     case 'image': {
@@ -414,26 +550,79 @@ function hasEffectiveUpdate(
   return false;
 }
 
+function buildRoomEventEntry(params: {
+  roomId: string;
+  operationId: string;
+  actorSessionId: string;
+  actorDisplayName: string;
+  eventType: RoomEventType;
+  payload: Record<string, unknown>;
+}): RoomEventJournalEntry {
+  return {
+    roomId: params.roomId,
+    operationId: params.operationId,
+    actorSessionId: params.actorSessionId,
+    actorDisplayName: params.actorDisplayName,
+    eventType: params.eventType,
+    payload: params.payload,
+    schemaVersion: ROOM_EVENT_SCHEMA_VERSION,
+  };
+}
+
 const prismaObjectRepository: ObjectRepository = {
-  async createObject(data) {
-    return prisma.canvasObject.create({ data });
+  async createObject(data, journalEntry) {
+    if (!journalEntry) {
+      return prisma.canvasObject.create({ data });
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const created = await tx.canvasObject.create({ data });
+      await appendRoomEvent(tx, journalEntry);
+      return created;
+    });
   },
   async findObject(roomId, objectId) {
     return prisma.canvasObject.findFirst({
       where: { id: objectId, roomId, deletedAt: null },
     });
   },
-  async updateObject(objectId, data) {
-    return prisma.canvasObject.update({
-      where: { id: objectId },
-      data,
+  async updateObject(objectId, data, journalEntry) {
+    if (!journalEntry) {
+      return prisma.canvasObject.update({
+        where: { id: objectId },
+        data,
+      });
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.canvasObject.update({
+        where: { id: objectId },
+        data,
+      });
+      await appendRoomEvent(tx, journalEntry);
+      return updated;
     });
   },
-  async deleteObject(roomId, objectId) {
-    const deleted = await prisma.canvasObject.deleteMany({
-      where: { id: objectId, roomId },
+  async deleteObject(roomId, objectId, journalEntry) {
+    if (!journalEntry) {
+      const deleted = await prisma.canvasObject.deleteMany({
+        where: { id: objectId, roomId },
+      });
+      return deleted.count;
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const deleted = await tx.canvasObject.deleteMany({
+        where: { id: objectId, roomId },
+      });
+
+      if (deleted.count === 0) {
+        return 0;
+      }
+
+      await appendRoomEvent(tx, journalEntry);
+      return deleted.count;
     });
-    return deleted.count;
   },
   async getRoomObjects(roomId) {
     return prisma.canvasObject.findMany({
@@ -627,6 +816,14 @@ export function registerObjectHandlersWithRepository(io: Server, repository: Obj
         return;
       }
 
+      if (!isValidObjectGeometry(object)) {
+        socket.emit('error', {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid object payload',
+        });
+        return;
+      }
+
       if (!authSocket.sessionId) {
         socket.emit('error', {
           code: 'SESSION_INVALID',
@@ -637,8 +834,16 @@ export function registerObjectHandlersWithRepository(io: Server, repository: Obj
 
       try {
         const created = await repository.createObject(
-          toCreateData(roomId, authSocket.sessionId as string, object)
-        );
+            toCreateData(roomId, authSocket.sessionId as string, object),
+            buildRoomEventEntry({
+              roomId,
+              operationId,
+              actorSessionId: authSocket.sessionId as string,
+              actorDisplayName: authSocket.displayName as string,
+              eventType: 'object:create',
+              payload: { object },
+            })
+          );
 
         const clientObject = toClientObject(created);
         if (!clientObject) {
@@ -677,6 +882,14 @@ export function registerObjectHandlersWithRepository(io: Server, repository: Obj
         return;
       }
 
+      if (!updates || typeof updates !== 'object' || !isValidUpdatePayload(updates)) {
+        socket.emit('error', {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid object payload',
+        });
+        return;
+      }
+
       try {
         const existing = await repository.findObject(roomId, objectId);
 
@@ -698,7 +911,26 @@ export function registerObjectHandlersWithRepository(io: Server, repository: Obj
           return;
         }
 
-        await repository.updateObject(existing.id, updateData);
+        if (!isValidObjectAfterUpdate(existing, updateData)) {
+          socket.emit('error', {
+            code: 'INVALID_PAYLOAD',
+            message: 'Invalid object payload',
+          });
+          return;
+        }
+
+        await repository.updateObject(
+          existing.id,
+          updateData,
+          buildRoomEventEntry({
+            roomId,
+            operationId,
+            actorSessionId: authSocket.sessionId as string,
+            actorDisplayName: authSocket.displayName as string,
+            eventType: 'object:update',
+            payload: { objectId, updates },
+          })
+        );
 
         io.to(roomId).emit('object:updated', {
           operationId,
@@ -729,7 +961,18 @@ export function registerObjectHandlersWithRepository(io: Server, repository: Obj
       }
 
       try {
-        const deletedCount = await repository.deleteObject(roomId, objectId);
+        const deletedCount = await repository.deleteObject(
+          roomId,
+          objectId,
+          buildRoomEventEntry({
+            roomId,
+            operationId,
+            actorSessionId: authSocket.sessionId as string,
+            actorDisplayName: authSocket.displayName as string,
+            eventType: 'object:delete',
+            payload: { objectId },
+          })
+        );
 
         if (deletedCount === 0) {
           socket.emit('error', {

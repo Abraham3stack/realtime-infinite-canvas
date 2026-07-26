@@ -1,5 +1,8 @@
 import type { Server, Socket } from 'socket.io';
+import { prisma } from '../../db/prisma.js';
 import type { AuthenticatedSocket } from '../types.js';
+import type { RoomEventType } from '@realtime-canvas/shared';
+import { appendRoomEvent, ROOM_EVENT_SCHEMA_VERSION, type RoomEventJournalEntry } from '../../journal/roomEvents.js';
 
 export interface RoomPhysicsState {
 	enabled: boolean;
@@ -21,21 +24,25 @@ interface PhysicsStatePatch {
 }
 
 interface PhysicsUpdateStatePayload {
+	operationId: string;
 	roomId: string;
 	patch: PhysicsStatePatch;
 }
 
 interface PhysicsSetStaticPayload {
+	operationId: string;
 	roomId: string;
 	objectId: string;
 	isStatic: boolean;
 }
 
 interface PhysicsResetPayload {
+	operationId: string;
 	roomId: string;
 }
 
 const roomPhysicsState = new Map<string, RoomPhysicsState>();
+const roomPhysicsJournalQueue = new Map<string, Promise<void>>();
 
 const DEFAULT_STATE: Omit<RoomPhysicsState, 'revision'> = {
 	enabled: false,
@@ -77,20 +84,70 @@ function isRoomAuthorized(socket: AuthenticatedSocket, roomId: string): boolean 
 	return Boolean(socket.roomId && socket.roomId === roomId);
 }
 
+function buildRoomEventEntry(params: {
+	roomId: string;
+	operationId: string;
+	actorSessionId: string;
+	actorDisplayName: string;
+	eventType: RoomEventType;
+	payload: Record<string, unknown>;
+}): RoomEventJournalEntry {
+	return {
+		roomId: params.roomId,
+		operationId: params.operationId,
+		actorSessionId: params.actorSessionId,
+		actorDisplayName: params.actorDisplayName,
+		eventType: params.eventType,
+		payload: params.payload,
+		schemaVersion: ROOM_EVENT_SCHEMA_VERSION,
+	};
+}
+
+function enqueueRoomPhysicsJournalWrite(params: {
+	roomId: string;
+	logLabel: string;
+	task: () => Promise<void>;
+}): void {
+	const prior = roomPhysicsJournalQueue.get(params.roomId) ?? Promise.resolve();
+
+	const next = prior
+		.catch(() => {
+			// Preserve queue progression after prior failures.
+		})
+		.then(params.task)
+		.catch((err) => {
+			console.error(`[${params.logLabel}] journal error:`, err);
+		})
+		.finally(() => {
+			if (roomPhysicsJournalQueue.get(params.roomId) === next) {
+				roomPhysicsJournalQueue.delete(params.roomId);
+			}
+		});
+
+	roomPhysicsJournalQueue.set(params.roomId, next);
+}
+
 export function getRoomPhysicsState(roomId: string): RoomPhysicsState {
 	return ensureRoomPhysicsState(roomId);
 }
 
 export function clearRoomPhysicsState(roomId: string): void {
 	roomPhysicsState.delete(roomId);
+	roomPhysicsJournalQueue.delete(roomId);
 }
 
 export function registerPhysicsHandlers(io: Server): void {
 	io.on('connection', (socket: Socket) => {
 		const authSocket = socket as AuthenticatedSocket;
 
-		socket.on('physics:update-state', (payload: PhysicsUpdateStatePayload) => {
-			if (!payload || typeof payload.roomId !== 'string' || typeof payload.patch !== 'object' || payload.patch === null) {
+			socket.on('physics:update-state', (payload: PhysicsUpdateStatePayload) => {
+			if (
+				!payload ||
+				typeof payload.operationId !== 'string' ||
+				typeof payload.roomId !== 'string' ||
+				typeof payload.patch !== 'object' ||
+				payload.patch === null
+			) {
 				return;
 			}
 
@@ -119,10 +176,35 @@ export function registerPhysicsHandlers(io: Server): void {
 
 			roomPhysicsState.set(payload.roomId, next);
 			emitRoomState(io, payload.roomId, next);
+
+			enqueueRoomPhysicsJournalWrite({
+				roomId: payload.roomId,
+				logLabel: 'physics:update-state',
+				task: async () => {
+					await prisma.$transaction(async (tx) => {
+						await appendRoomEvent(
+							tx,
+							buildRoomEventEntry({
+								roomId: payload.roomId,
+								operationId: payload.operationId,
+								actorSessionId: authSocket.sessionId as string,
+								actorDisplayName: authSocket.displayName as string,
+								eventType: 'physics:update-state',
+								payload: { patch },
+							})
+						);
+					});
+				},
+			});
 		});
 
-		socket.on('physics:set-static', (payload: PhysicsSetStaticPayload) => {
-			if (!payload || typeof payload.roomId !== 'string' || typeof payload.objectId !== 'string') {
+			socket.on('physics:set-static', (payload: PhysicsSetStaticPayload) => {
+			if (
+				!payload ||
+				typeof payload.operationId !== 'string' ||
+				typeof payload.roomId !== 'string' ||
+				typeof payload.objectId !== 'string'
+			) {
 				return;
 			}
 
@@ -147,10 +229,30 @@ export function registerPhysicsHandlers(io: Server): void {
 
 			roomPhysicsState.set(payload.roomId, next);
 			emitRoomState(io, payload.roomId, next);
+
+			enqueueRoomPhysicsJournalWrite({
+				roomId: payload.roomId,
+				logLabel: 'physics:set-static',
+				task: async () => {
+					await prisma.$transaction(async (tx) => {
+						await appendRoomEvent(
+							tx,
+							buildRoomEventEntry({
+								roomId: payload.roomId,
+								operationId: payload.operationId,
+								actorSessionId: authSocket.sessionId as string,
+								actorDisplayName: authSocket.displayName as string,
+								eventType: 'physics:set-static',
+								payload: { objectId: payload.objectId, isStatic: payload.isStatic },
+							})
+						);
+					});
+				},
+			});
 		});
 
-		socket.on('physics:reset', (payload: PhysicsResetPayload) => {
-			if (!payload || typeof payload.roomId !== 'string') {
+			socket.on('physics:reset', (payload: PhysicsResetPayload) => {
+			if (!payload || typeof payload.operationId !== 'string' || typeof payload.roomId !== 'string') {
 				return;
 			}
 
@@ -167,6 +269,26 @@ export function registerPhysicsHandlers(io: Server): void {
 
 			roomPhysicsState.set(payload.roomId, next);
 			emitRoomState(io, payload.roomId, next);
+
+			enqueueRoomPhysicsJournalWrite({
+				roomId: payload.roomId,
+				logLabel: 'physics:reset',
+				task: async () => {
+					await prisma.$transaction(async (tx) => {
+						await appendRoomEvent(
+							tx,
+							buildRoomEventEntry({
+								roomId: payload.roomId,
+								operationId: payload.operationId,
+								actorSessionId: authSocket.sessionId as string,
+								actorDisplayName: authSocket.displayName as string,
+								eventType: 'physics:reset',
+								payload: {},
+							})
+						);
+					});
+				},
+			});
 		});
 	});
 }
