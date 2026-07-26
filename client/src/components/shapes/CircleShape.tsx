@@ -9,17 +9,24 @@ interface ShapeProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onDragStart?: () => void;
+  onDragMove?: (x: number, y: number) => void;
+  draggable?: boolean;
 }
 
 const HANDLE_SIZE = 10;
 const MIN_SIZE = 32;
 
-export const CircleShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
+export const CircleShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, onDragStart, onDragMove, draggable = true }) => {
   const groupRef = useRef<Konva.Group>(null);
 
   const handleDragStart = useCallback(() => {
-    // Visual feedback
-  }, []);
+    onDragStart?.();
+  }, [onDragStart]);
+
+  const handleDragMove = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    onDragMove?.(e.target.x(), e.target.y());
+  }, [onDragMove]);
 
   const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     onMove(e.target.x(), e.target.y());
@@ -42,8 +49,9 @@ export const CircleShape: React.FC<ShapeProps> = ({ object, selected, onMove, on
       id={object.id}
       x={object.x}
       y={object.y}
-      draggable
+      draggable={draggable}
       onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >

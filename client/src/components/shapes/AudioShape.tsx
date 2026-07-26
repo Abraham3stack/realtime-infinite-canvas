@@ -9,13 +9,16 @@ interface ShapeProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onDragStart?: () => void;
+  onDragMove?: (x: number, y: number) => void;
+  draggable?: boolean;
 }
 
 const HANDLE_SIZE = 10;
 const MIN_WIDTH = 120;
 const MIN_HEIGHT = 56;
 
-export const AudioShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
+export const AudioShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, draggable = true }) => {
   const groupRef = useRef<Konva.Group>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -80,7 +83,7 @@ export const AudioShape: React.FC<ShapeProps> = ({ object, selected, onMove, onR
       id={object.id}
       x={object.x}
       y={object.y}
-      draggable
+      draggable={draggable}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >

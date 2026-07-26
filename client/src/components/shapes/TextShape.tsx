@@ -9,13 +9,16 @@ interface ShapeProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onDragStart?: () => void;
+  onDragMove?: (x: number, y: number) => void;
+  draggable?: boolean;
 }
 
 const HANDLE_SIZE = 10;
 const MIN_WIDTH = 80;
 const MIN_HEIGHT = 32;
 
-export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
+export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, draggable = true }) => {
   const textRef = useRef<Konva.Text>(null);
   const groupRef = useRef<Konva.Group>(null);
 
@@ -43,7 +46,7 @@ export const TextShape: React.FC<ShapeProps> = ({ object, selected, onMove, onRe
       id={object.id}
       x={object.x}
       y={object.y}
-      draggable
+      draggable={draggable}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}

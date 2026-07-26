@@ -14,6 +14,9 @@ interface ObjectRendererProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onDragStart?: () => void;
+  onDragMove?: (x: number, y: number) => void;
+  draggable?: boolean;
 }
 
 // Factory mapping: object type -> React component
@@ -43,6 +46,9 @@ const ObjectRendererImpl: React.FC<ObjectRendererProps> = ({
   onMove,
   onResize,
   onDelete,
+  onDragStart,
+  onDragMove,
+  draggable,
 }) => {
   const Component = shapeComponentMap[object.type];
 
@@ -51,7 +57,18 @@ const ObjectRendererImpl: React.FC<ObjectRendererProps> = ({
     return null;
   }
 
-  return <Component object={object} selected={selected} onMove={onMove} onResize={onResize} onDelete={onDelete} />;
+  return (
+    <Component
+      object={object}
+      selected={selected}
+      onMove={onMove}
+      onResize={onResize}
+      onDelete={onDelete}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      draggable={draggable}
+    />
+  );
 };
 
 export const ObjectRenderer = React.memo(

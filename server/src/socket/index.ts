@@ -2,6 +2,7 @@ import type { Server } from 'socket.io';
 import { authMiddleware } from './middleware/auth.js';
 import { registerRoomHandlers } from './handlers/room.js';
 import { registerObjectHandlers } from './handlers/objects.js';
+import { registerPhysicsHandlers } from './handlers/physics.js';
 
 /**
  * Attaches all Socket.IO middleware and domain handlers.
@@ -19,4 +20,7 @@ export function registerSocketHandlers(io: Server): void {
 
   // Register all object synchronization handlers.
   registerObjectHandlers(io);
+
+  // Register room-scoped physics state synchronization handlers.
+  registerPhysicsHandlers(io);
 }

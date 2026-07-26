@@ -9,6 +9,9 @@ interface ShapeProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onDragStart?: () => void;
+  onDragMove?: (x: number, y: number) => void;
+  draggable?: boolean;
 }
 
 export const StickyNoteShape: React.FC<ShapeProps> = ({
@@ -17,6 +20,7 @@ export const StickyNoteShape: React.FC<ShapeProps> = ({
   onMove,
   onResize,
   onDelete,
+  draggable = true,
 }) => {
   const groupRef = useRef<Konva.Group>(null);
   const rectRef = useRef<Konva.Rect>(null);
@@ -48,7 +52,7 @@ export const StickyNoteShape: React.FC<ShapeProps> = ({
       id={object.id}
       x={object.x}
       y={object.y}
-      draggable
+      draggable={draggable}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}

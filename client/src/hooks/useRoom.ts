@@ -4,6 +4,7 @@ import { socket } from '../socket.js';
 import { useRoomStore } from '../store/room.js';
 import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
 import { clearPersistedRoom, writePersistedRoom } from '../utils/persistence.js';
+import { DEFAULT_ROOM_PHYSICS_STATE, type RoomPhysicsState, usePhysicsStore } from '../store/physics.js';
 
 interface RoomCreateResponse {
   code?: string;
@@ -13,6 +14,8 @@ interface RoomCreateResponse {
   session?: { id: string; token: string };
   participant?: Record<string, unknown>;
   initialState?: Record<string, unknown>;
+  createdBySessionId?: string;
+  physicsState?: RoomPhysicsState;
 }
 
 interface RoomJoinResponse {
@@ -22,6 +25,8 @@ interface RoomJoinResponse {
   title?: string;
   participants?: Array<Record<string, unknown>>;
   canvasObjects?: Array<Record<string, unknown>>;
+  createdBySessionId?: string;
+  physicsState?: RoomPhysicsState;
 }
 
 interface RoomLeaveResponse {
@@ -49,6 +54,7 @@ interface UserLeftPayload {
 export function useCreateRoom() {
   const setRoom = useRoomStore(useShallow((s) => s.setRoom));
   const setParticipants = useRoomStore(useShallow((s) => s.setParticipants));
+  const setRoomPhysics = usePhysicsStore(useShallow((s) => s.setRoomPhysics));
 
   const createRoom = useCallback(
     async (displayName?: string): Promise<void> => {
@@ -64,6 +70,7 @@ export function useCreateRoom() {
             id: response.roomId || '',
             shareCode: response.shareCode || '',
             title: response.initialState?.roomId as string || '',
+            createdBySessionId: response.createdBySessionId,
           });
           const participants = (response.initialState as { participants?: Array<Record<string, unknown>> })?.participants || [];
           setParticipants(participants.map((p) => ({
@@ -75,6 +82,10 @@ export function useCreateRoom() {
             isActive: p.isActive as boolean,
           })));
 
+          if (response.physicsState) {
+            setRoomPhysics(response.physicsState);
+          }
+
           if (response.roomId && response.shareCode) {
             writePersistedRoom({ roomId: response.roomId, shareCode: response.shareCode });
           }
@@ -82,7 +93,7 @@ export function useCreateRoom() {
         });
       });
     },
-    [setRoom, setParticipants]
+    [setRoom, setParticipants, setRoomPhysics]
   );
 
   return createRoom;
@@ -99,6 +110,7 @@ export function useJoinRoom() {
   const setRoom = useRoomStore(useShallow((s) => s.setRoom));
   const setParticipants = useRoomStore(useShallow((s) => s.setParticipants));
   const setObjects = useCanvasObjectsStore(useShallow((s) => s.setObjects));
+  const setRoomPhysics = usePhysicsStore(useShallow((s) => s.setRoomPhysics));
 
   const joinRoom = useCallback(
     async (roomId?: string, shareCode?: string): Promise<void> => {
@@ -113,6 +125,7 @@ export function useJoinRoom() {
             id: response.roomId || '',
             shareCode: shareCode || '',
             title: response.title || '',
+            createdBySessionId: response.createdBySessionId,
           });
           const participants = response.participants || [];
           setParticipants(participants.map((p) => ({
@@ -129,6 +142,8 @@ export function useJoinRoom() {
           const canvasObjects = (response.canvasObjects || []) as Array<Record<string, unknown>>;
           setObjects(canvasObjects as unknown as CanvasObject[]);
 
+          setRoomPhysics(response.physicsState || DEFAULT_ROOM_PHYSICS_STATE);
+
           const resolvedRoomId = response.roomId || roomId || '';
           if (resolvedRoomId) {
             writePersistedRoom({
@@ -141,7 +156,7 @@ export function useJoinRoom() {
         });
       });
     },
-    [setRoom, setParticipants, setObjects]
+    [setRoom, setParticipants, setObjects, setRoomPhysics]
   );
 
   return joinRoom;
@@ -154,6 +169,7 @@ export function useJoinRoom() {
 export function useLeaveRoom() {
   const clearRoom = useRoomStore(useShallow((s) => s.clearRoom));
   const clearObjects = useCanvasObjectsStore(useShallow((s) => s.clear));
+  const clearRoomPhysics = usePhysicsStore(useShallow((s) => s.clearRoomPhysics));
 
   const leaveRoom = useCallback(async (): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -164,11 +180,12 @@ export function useLeaveRoom() {
         }
         clearRoom();
         clearObjects();
+        clearRoomPhysics();
         clearPersistedRoom();
         resolve();
       });
     });
-  }, [clearRoom, clearObjects]);
+  }, [clearRoom, clearObjects, clearRoomPhysics]);
 
   return leaveRoom;
 }
@@ -226,6 +243,7 @@ export function useRoomAutoRejoin(): void {
   const setRoom = useRoomStore(useShallow((s) => s.setRoom));
   const setParticipants = useRoomStore(useShallow((s) => s.setParticipants));
   const setObjects = useCanvasObjectsStore(useShallow((s) => s.setObjects));
+  const setRoomPhysics = usePhysicsStore(useShallow((s) => s.setRoomPhysics));
 
   useEffect(() => {
     if (!room) return;
@@ -240,6 +258,7 @@ export function useRoomAutoRejoin(): void {
           id: response.roomId || room.id,
           shareCode: room.shareCode,
           title: response.title || room.title,
+          createdBySessionId: response.createdBySessionId || room.createdBySessionId,
         });
 
         const participants = response.participants || [];
@@ -254,6 +273,8 @@ export function useRoomAutoRejoin(): void {
 
         const canvasObjects = (response.canvasObjects || []) as Array<Record<string, unknown>>;
         setObjects(canvasObjects as unknown as CanvasObject[]);
+
+        setRoomPhysics(response.physicsState || DEFAULT_ROOM_PHYSICS_STATE);
       });
     };
 
@@ -261,5 +282,5 @@ export function useRoomAutoRejoin(): void {
     return () => {
       socket.off('connect', handleReconnect);
     };
-  }, [room, setObjects, setParticipants, setRoom]);
+  }, [room, setObjects, setParticipants, setRoom, setRoomPhysics]);
 }

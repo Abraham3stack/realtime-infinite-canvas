@@ -9,13 +9,16 @@ interface ShapeProps {
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
   onDelete: () => void;
+  onDragStart?: () => void;
+  onDragMove?: (x: number, y: number) => void;
+  draggable?: boolean;
 }
 
 const HANDLE_SIZE = 10;
 const MIN_WIDTH = 80;
 const MIN_HEIGHT = 60;
 
-export const ImageShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete }) => {
+export const ImageShape: React.FC<ShapeProps> = ({ object, selected, onMove, onResize, onDelete, draggable = true }) => {
   const groupRef = useRef<Konva.Group>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
 
@@ -64,7 +67,7 @@ export const ImageShape: React.FC<ShapeProps> = ({ object, selected, onMove, onR
       id={object.id}
       x={object.x}
       y={object.y}
-      draggable
+      draggable={draggable}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
     >

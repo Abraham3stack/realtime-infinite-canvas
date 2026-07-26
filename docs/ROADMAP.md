@@ -1299,6 +1299,8 @@ Reach stable performance and correctness with realistic judging load.
 
 ## Phase 5 - Creative Features (Priority Order)
 
+**Status**: ✅ PHYSICS COMPLETE (phase partially complete)
+
 ### Goal
 
 Implement high-scoring creative features in strict priority order after MVP stability is achieved.
@@ -1308,6 +1310,56 @@ Implement high-scoring creative features in strict priority order after MVP stab
 - Physics interactions (Matter.js) for selected object classes
 - Mini-map and radar with collaborator location indicators
 - Offline sync stretch implementation only if prior items are stable
+
+### ✅ Completed (Physics Slice)
+
+- Matter.js physics simulation integrated into canvas runtime for rectangle and circle objects
+- Host-authoritative simulation loop implemented and synchronized over realtime object updates
+- Room-scoped physics state channel implemented (enabled/running/gravity/restitution/frictionAir/static set/reset)
+- Late-join consistency preserved through existing room/object hydration and ongoing realtime simulation updates
+- Persistent engine/world lifecycle enforced during active simulation
+- Real dynamic-static floor collisions with restitution bounce verified in browser evidence
+
+### 🔍 Root Cause Resolved
+
+- The non-bouncing failure mode was caused by simulation-coupled world reconstruction:
+  - physics-driven x/y/rotation writes retriggered body rebuild effect
+  - `World.clear` and `World.add` were repeatedly invoked during active simulation
+  - dynamic and static Matter body IDs churned continuously
+- Resolution: rebuild lifecycle is constrained to structural changes only, with in-place runtime physics parameter updates and persistent world usage during simulation.
+
+### 🧪 Validation Summary (Physics)
+
+- Quality gates:
+  - ✅ `npm run typecheck`
+  - ✅ `npm run lint`
+  - ✅ `npm run build`
+  - ✅ `npm test`
+- Browser/runtime proof artifacts captured under `docs/validation/evidence/phase5_postfix_2026-07-26T09-46-24-484Z/` and promoted proof file `docs/validation/evidence/phase5_postfix_browser_proof.json`.
+
+### 🌐 Browser Validation Results (Physics Proof)
+
+- Engine/world stability after initialization:
+  - `Engine.create` count: `1`
+  - `World.clear` count: `1`
+  - `World.add` count: `1`
+- Continuous simulation:
+  - `Engine.update` count: `497`
+- Collision evidence:
+  - `collisionStart` count: `107`
+  - `collisionActive` count: `646`
+  - `collisionEnd` count: `105`
+- Body ID stability:
+  - dynamic and static body ID sequences remained stable through simulation (raw sequence exported)
+- Velocity evidence confirms Matter restitution bounce against static floor:
+  - positive `velocity.y` before floor impact
+  - floor collision event
+  - negative `velocity.y` after impact
+
+### ⚠️ Remaining Scope (Phase 5)
+
+- Mini-map and radar with collaborator location indicators
+- Offline sync stretch implementation (only if it does not regress core correctness)
 
 ### Acceptance Criteria
 
@@ -1345,6 +1397,12 @@ Implement high-scoring creative features in strict priority order after MVP stab
 - No runtime errors
 - No UI overlap or responsive regressions
 - Documentation updated
+
+### 📝 Technical Debt
+
+- Add CI-stable browser assertions for physics evidence (counts, body-ID stability, bounce polarity checks)
+- Extend automated multiplayer physics scenarios to include pin/unpin transitions and long-run drift checks
+- Consider extracting physics reconciliation and authority rules into dedicated modules for maintainability as Mini-map/Radar is added
 
 ---
 

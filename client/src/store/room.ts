@@ -13,6 +13,7 @@ export interface Room {
   id: string;
   shareCode: string;
   title: string;
+  createdBySessionId?: string;
 }
 
 export interface RoomState {

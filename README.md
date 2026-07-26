@@ -201,6 +201,35 @@ Canvas toolbar includes:
   - timestamps (`createdAt`, `updatedAt`, `mediaCreatedAt`)
   - media metadata (`publicId`, `secureUrl`, `resourceType`, `format`, `bytes`, dimensions, duration, MIME type)
 
+## Physics System (Phase 5)
+
+Physics mode is implemented with Matter.js and synchronized across collaborators.
+
+- Matter.js powered rigid-body simulation for canvas objects
+- Host-authoritative simulation loop (room creator is simulation authority)
+- Realtime synchronized body transforms to connected participants
+- Late-joiners hydrate into current room state and receive ongoing physics updates
+- Persistent engine and world lifecycle during active simulation (no per-frame world reconstruction)
+
+Physics-enabled object types:
+
+- Rectangle
+- Circle
+
+Intentional limitations:
+
+- Text, sticky note, image, audio, and video objects are not simulated as dynamic Matter bodies
+- Physics controls are room-scoped and authority is single-host
+- Mini-map/radar and offline sync are not part of the shipped physics slice
+
+## Architecture Overview
+
+- Frontend rendering: React + Konva
+- Physics runtime: Matter.js inside the canvas runtime
+- Realtime transport: Socket.IO
+- Authority model: host-authoritative simulation, follower-side rendering and sync consumption
+- Persistence and hydration: room/object state from backend snapshot + realtime stream
+
 ## Technology Stack
 
 **Frontend:**
@@ -210,6 +239,8 @@ Canvas toolbar includes:
 - Vite
 - Socket.IO Client
 - Zustand (state management)
+- Konva (canvas rendering)
+- Matter.js (physics simulation)
 
 **Backend:**
 
@@ -261,7 +292,7 @@ Frontend React application with Vite build system.
 - **Phase 2** - Infinite Canvas and Mandatory Object Types ✅
 - **Phase 3** - Media Pipeline and Export Verification ✅
 - **Phase 4** - Performance Hardening for Judging Conditions ✅
-- **Phase 5** - Creative Features (not started)
+- **Phase 5** - Creative Features (physics complete; mini-map/radar and offline sync remaining)
 - **Phase 6** - Final Polish and Submission Readiness (not started)
 
 Current status is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

@@ -4,6 +4,7 @@ import { prisma } from '../../db/prisma.js';
 import { ErrorCodes } from '@realtime-canvas/shared';
 import type { AuthenticatedSocket } from '../types.js';
 import { getRoomObjects } from './objects.js';
+import { getRoomPhysicsState, type RoomPhysicsState } from './physics.js';
 
 const generateShareCode = customAlphabet('23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz', 6);
 
@@ -19,6 +20,8 @@ interface RoomResponse {
   title?: string;
   participants?: Array<Record<string, unknown>>;
   canvasObjects?: Array<Record<string, unknown>>;
+  physicsState?: RoomPhysicsState;
+  createdBySessionId?: string;
 }
 
 interface RoomJoinPayload {
@@ -101,6 +104,8 @@ export function registerRoomHandlers(io: Server): void {
         callback({
           roomId: room.id,
           shareCode: room.shareCode,
+          createdBySessionId: room.createdBySessionId,
+          physicsState: getRoomPhysicsState(room.id),
           session: { id: sessionId, token: 'N/A' },
           participant: {
             id: participant.id,
@@ -215,8 +220,10 @@ export function registerRoomHandlers(io: Server): void {
         callback({
           roomId: room.id,
           title: room.title ?? `Room ${room.shareCode}`,
+          createdBySessionId: room.createdBySessionId,
           participants: snapshotParticipants,
           canvasObjects,
+          physicsState: getRoomPhysicsState(room.id),
         });
 
         // Broadcast the new participant to all other sockets in the room.

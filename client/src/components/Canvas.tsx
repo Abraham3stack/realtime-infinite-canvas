@@ -1,6 +1,7 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { Stage, Layer } from 'react-konva';
 import Konva from 'konva';
+import Matter from 'matter-js';
 import { useViewportStore } from '../store/viewport.js';
 import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
 import { useRoomStore } from '../store/room.js';
@@ -10,6 +11,7 @@ import { socket } from '../socket.js';
 import type { CanvasObjectType } from '../store/objects.js';
 import { uploadMediaFiles, type MediaUploadType, type UploadedMedia } from '../hooks/useMediaUpload.js';
 import { canvasCenterToWorld, clientToCanvasPoint } from '../utils/coordinates.js';
+import { type RoomPhysicsState, usePhysicsStore } from '../store/physics.js';
 
 // Type definitions for socket payloads
 interface ObjectCreatedPayload {
@@ -29,6 +31,57 @@ interface ObjectDeletedPayload {
   operationId: string;
   objectId: string;
   serverTs: Date;
+}
+
+interface PhysicsStatePayload {
+  roomId: string;
+  state: RoomPhysicsState;
+  serverTs: string;
+}
+
+interface DragVelocitySample {
+  startX: number;
+  startY: number;
+  startAt: number;
+  lastX: number;
+  lastY: number;
+  lastAt: number;
+}
+
+const PHYSICS_OBJECT_TYPES: CanvasObjectType[] = ['rectangle', 'circle'];
+const PHYSICS_OBJECT_TYPE_SET = new Set<CanvasObjectType>(PHYSICS_OBJECT_TYPES);
+const PHYSICS_SYNC_INTERVAL_MS = 80;
+const PHYSICS_DRAG_VELOCITY_MAX = 2.5;
+
+function isPhysicsObjectType(type: CanvasObjectType): boolean {
+  return PHYSICS_OBJECT_TYPE_SET.has(type);
+}
+
+function buildMatterBodyFromObject(
+  object: CanvasObject,
+  physics: RoomPhysicsState,
+  pinned: boolean
+): Matter.Body {
+  const common = {
+    restitution: physics.restitution,
+    frictionAir: physics.frictionAir,
+    friction: 0.1,
+    isStatic: pinned,
+    angle: object.rotation,
+  };
+
+  if (object.type === 'circle') {
+    const radius = Math.max(8, object.width / 2);
+    return Matter.Bodies.circle(object.x + radius, object.y + radius, radius, common);
+  }
+
+  return Matter.Bodies.rectangle(
+    object.x + object.width / 2,
+    object.y + object.height / 2,
+    Math.max(16, object.width),
+    Math.max(16, object.height),
+    common
+  );
 }
 
 interface CanvasProps {
@@ -102,7 +155,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     updateObject: s.updateObject,
     deleteObject: s.deleteObject,
   }));
-  const { room } = useRoomStore();
+  const { room } = useRoomStore((s) => ({ room: s.room }));
+  const roomPhysics = usePhysicsStore((s) => s.roomPhysics);
+  const setRoomPhysics = usePhysicsStore((s) => s.setRoomPhysics);
 
   // Tracks optimistic operations until their server echo returns.
   // This prevents duplicate application of local writes while preserving all
@@ -112,6 +167,39 @@ export const Canvas: React.FC<CanvasProps> = ({
   const pendingPanRef = useRef({ dx: 0, dy: 0 });
   const zoomRafRef = useRef<number | null>(null);
   const pendingZoomRef = useRef<{ deltaY: number; mouseX: number; mouseY: number } | null>(null);
+  const engineRef = useRef<Matter.Engine | null>(null);
+  const runnerRef = useRef<Matter.Runner | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const bodyMapRef = useRef<Map<string, Matter.Body>>(new Map());
+  const boundsRef = useRef<{ floorY: number; leftX: number; rightX: number } | null>(null);
+  const resetSnapshotRef = useRef<Map<string, { x: number; y: number; rotation: number }>>(new Map());
+  const lastSyncTsRef = useRef(0);
+  const dragVelocityRef = useRef<Map<string, DragVelocitySample>>(new Map());
+  const roomPhysicsRef = useRef(roomPhysics);
+  const pinnedSetRef = useRef<Set<string>>(new Set());
+
+  const isPhysicsAuthority = useMemo(() => {
+    if (!room?.createdBySessionId || !sessionId) return false;
+    return room.createdBySessionId === sessionId;
+  }, [room?.createdBySessionId, sessionId]);
+
+  const pinnedSet = useMemo(() => new Set(roomPhysics.staticObjectIds), [roomPhysics.staticObjectIds]);
+  const physicsStructureSignature = useMemo(() => {
+    return objects
+      .filter((object) => isPhysicsObjectType(object.type))
+      .map((object) => `${object.id}:${object.type}:${Math.round(object.width)}:${Math.round(object.height)}`)
+      .sort()
+      .join('|');
+  }, [objects]);
+  const physicsPinnedSignature = useMemo(() => roomPhysics.staticObjectIds.slice().sort().join('|'), [roomPhysics.staticObjectIds]);
+
+  useEffect(() => {
+    roomPhysicsRef.current = roomPhysics;
+  }, [roomPhysics]);
+
+  useEffect(() => {
+    pinnedSetRef.current = pinnedSet;
+  }, [pinnedSet]);
 
   /**
    * Generates a per-operation correlation id used for optimistic echo handling.
@@ -154,6 +242,30 @@ export const Canvas: React.FC<CanvasProps> = ({
       objectId,
     });
   }, [generateOperationId, room]);
+
+  const emitPhysicsStatePatch = useCallback((patch: Partial<RoomPhysicsState>) => {
+    if (!room) return;
+    socket.emit('physics:update-state', {
+      roomId: room.id,
+      patch,
+    });
+  }, [room]);
+
+  const emitPhysicsSetStatic = useCallback((objectId: string, isStatic: boolean) => {
+    if (!room) return;
+    socket.emit('physics:set-static', {
+      roomId: room.id,
+      objectId,
+      isStatic,
+    });
+  }, [room]);
+
+  const emitPhysicsReset = useCallback(() => {
+    if (!room) return;
+    socket.emit('physics:reset', {
+      roomId: room.id,
+    });
+  }, [room]);
 
   const createObjectAndSync = useCallback((type: CanvasObjectType) => {
     if (!room) return;
@@ -375,13 +487,45 @@ export const Canvas: React.FC<CanvasProps> = ({
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
     if (!existing) return;
 
+    if (roomPhysics.enabled && isPhysicsObjectType(existing.type)) {
+      const body = bodyMapRef.current.get(objectId);
+      if (body) {
+        Matter.Body.setPosition(body, {
+          x: x + existing.width / 2,
+          y: y + existing.height / 2,
+        });
+      }
+
+      const velocity = dragVelocityRef.current.get(objectId);
+      if (body && velocity) {
+        const dtMs = Math.max(1, velocity.lastAt - velocity.startAt);
+        const vxPerMs = (velocity.lastX - velocity.startX) / dtMs;
+        const vyPerMs = (velocity.lastY - velocity.startY) / dtMs;
+        const fallbackVx = (x - existing.x) * 0.01;
+        const fallbackVy = (y - existing.y) * 0.01;
+        const mergedVx = Math.abs(vxPerMs * 16.666) > 0.05 ? vxPerMs * 16.666 : fallbackVx;
+        const mergedVy = Math.abs(vyPerMs * 16.666) > 0.05 ? vyPerMs * 16.666 : fallbackVy;
+        const vx = Math.max(-PHYSICS_DRAG_VELOCITY_MAX, Math.min(PHYSICS_DRAG_VELOCITY_MAX, mergedVx));
+        const vy = Math.max(-PHYSICS_DRAG_VELOCITY_MAX, Math.min(PHYSICS_DRAG_VELOCITY_MAX, mergedVy));
+        Matter.Body.setVelocity(body, { x: vx, y: vy });
+      }
+
+      updateObject(objectId, { x, y });
+
+      if (!isPhysicsAuthority) {
+        emitUpdate(objectId, { x, y });
+      }
+
+      return;
+    }
+
     // No-op suppression reduces avoidable socket traffic and DB writes during
     // drag paths that report duplicate positions.
     if (existing.x === x && existing.y === y) return;
 
     updateObject(objectId, { x, y });
     emitUpdate(objectId, { x, y });
-  }, [emitUpdate, updateObject]);
+  }, [emitUpdate, isPhysicsAuthority, roomPhysics.enabled, updateObject]);
 
   const resizeObjectAndSync = useCallback((objectId: string, width: number, height: number) => {
     const existing = useCanvasObjectsStore.getState().getObject(objectId);
@@ -393,6 +537,354 @@ export const Canvas: React.FC<CanvasProps> = ({
     updateObject(objectId, { width, height });
     emitUpdate(objectId, { width, height });
   }, [emitUpdate, updateObject]);
+
+  const handleObjectDragStart = useCallback((objectId: string) => {
+    const existing = useCanvasObjectsStore.getState().getObject(objectId);
+    if (!existing) return;
+
+    dragVelocityRef.current.set(objectId, {
+      startX: existing.x,
+      startY: existing.y,
+      startAt: performance.now(),
+      lastX: existing.x,
+      lastY: existing.y,
+      lastAt: performance.now(),
+    });
+
+    if (!roomPhysics.enabled || !isPhysicsObjectType(existing.type)) return;
+    const body = bodyMapRef.current.get(objectId);
+    if (!body) return;
+    Matter.Body.setStatic(body, false);
+    Matter.Body.setVelocity(body, { x: 0, y: 0 });
+  }, [roomPhysics.enabled]);
+
+  const handleObjectDragMove = useCallback((objectId: string, x: number, y: number) => {
+    const existing = useCanvasObjectsStore.getState().getObject(objectId);
+    if (!existing) return;
+
+    const previous = dragVelocityRef.current.get(objectId);
+    const now = performance.now();
+    if (previous) {
+      dragVelocityRef.current.set(objectId, {
+        startX: previous.startX,
+        startY: previous.startY,
+        startAt: previous.startAt,
+        lastX: x,
+        lastY: y,
+        lastAt: now,
+      });
+    } else {
+      dragVelocityRef.current.set(objectId, {
+        startX: x,
+        startY: y,
+        startAt: now,
+        lastX: x,
+        lastY: y,
+        lastAt: now,
+      });
+    }
+
+    if (!roomPhysics.enabled || !isPhysicsObjectType(existing.type)) return;
+
+    const body = bodyMapRef.current.get(objectId);
+    if (!body) return;
+
+    Matter.Body.setPosition(body, {
+      x: x + existing.width / 2,
+      y: y + existing.height / 2,
+    });
+  }, [roomPhysics.enabled]);
+
+  const resetPhysicsSnapshotFromCurrentObjects = useCallback(() => {
+    const next = new Map<string, { x: number; y: number; rotation: number }>();
+    const currentObjects = useCanvasObjectsStore.getState().objects;
+    currentObjects.forEach((object) => {
+      if (!isPhysicsObjectType(object.type)) return;
+      next.set(object.id, {
+        x: object.x,
+        y: object.y,
+        rotation: object.rotation,
+      });
+    });
+    resetSnapshotRef.current = next;
+  }, []);
+
+  const ensureMatterRuntime = useCallback(() => {
+    if (engineRef.current && runnerRef.current) {
+      return;
+    }
+
+    const engine = Matter.Engine.create();
+    engine.positionIterations = 10;
+    engine.velocityIterations = 8;
+    engine.gravity.scale = 0.01;
+    engine.gravity.x = 0;
+    engine.gravity.y = roomPhysics.gravityY;
+    runnerRef.current = Matter.Runner.create();
+    engineRef.current = engine;
+  }, [roomPhysics.gravityY]);
+
+  const clearMatterRuntime = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (runnerRef.current && engineRef.current) {
+      Matter.Runner.stop(runnerRef.current);
+      Matter.World.clear(engineRef.current.world, false);
+      Matter.Engine.clear(engineRef.current);
+    }
+
+    bodyMapRef.current.clear();
+    boundsRef.current = null;
+    engineRef.current = null;
+    runnerRef.current = null;
+  }, []);
+
+  const rebuildBodiesFromObjects = useCallback(() => {
+    ensureMatterRuntime();
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    const currentPhysics = roomPhysicsRef.current;
+    const currentPinnedSet = pinnedSetRef.current;
+    const currentObjects = useCanvasObjectsStore.getState().objects;
+
+    Matter.World.clear(engine.world, false);
+    bodyMapRef.current.clear();
+
+    const nextBodies: Matter.Body[] = [];
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    currentObjects.forEach((object) => {
+      if (!isPhysicsObjectType(object.type)) return;
+
+      const body = buildMatterBodyFromObject(object, currentPhysics, currentPinnedSet.has(object.id));
+      body.label = object.id;
+      bodyMapRef.current.set(object.id, body);
+      nextBodies.push(body);
+
+      minX = Math.min(minX, object.x);
+      minY = Math.min(minY, object.y);
+      maxX = Math.max(maxX, object.x + object.width);
+      maxY = Math.max(maxY, object.y + object.height);
+    });
+
+    if (nextBodies.length > 0) {
+      // Keep the arena comfortably larger than object bounds so collisions are
+      // observable and stable instead of happening at near-zero drop distance.
+      const wallThickness = 200;
+      const horizontalPadding = 600;
+      const floorGap = 420;
+      const sideGap = 260;
+
+      const centerX = (minX + maxX) / 2;
+      const spanWidth = Math.max(2200, maxX - minX + horizontalPadding * 2);
+      const spanHeight = Math.max(2600, maxY - minY + floorGap + sideGap);
+      const floorCenterY = maxY + floorGap + wallThickness / 2;
+      const sideCenterY = maxY + floorGap / 2;
+      const leftWallX = minX - sideGap;
+      const rightWallX = maxX + sideGap;
+
+      boundsRef.current = {
+        floorY: floorCenterY - wallThickness / 2,
+        leftX: leftWallX + wallThickness / 2,
+        rightX: rightWallX - wallThickness / 2,
+      };
+
+      nextBodies.push(
+        Matter.Bodies.rectangle(centerX, floorCenterY, spanWidth, wallThickness, { isStatic: true }),
+        Matter.Bodies.rectangle(leftWallX, sideCenterY, wallThickness, spanHeight, { isStatic: true }),
+        Matter.Bodies.rectangle(rightWallX, sideCenterY, wallThickness, spanHeight, { isStatic: true })
+      );
+    } else {
+      boundsRef.current = null;
+    }
+
+    Matter.World.add(engine.world, nextBodies);
+    engine.gravity.y = currentPhysics.gravityY;
+  }, [ensureMatterRuntime]);
+
+  const syncObjectFromBody = useCallback((objectId: string, body: Matter.Body) => {
+    const existing = useCanvasObjectsStore.getState().getObject(objectId);
+    if (!existing) return;
+
+    const nextX = body.position.x - existing.width / 2;
+    const nextY = body.position.y - existing.height / 2;
+    const nextRotation = body.angle;
+
+    if (
+      Math.abs(existing.x - nextX) < 0.25 &&
+      Math.abs(existing.y - nextY) < 0.25 &&
+      Math.abs(existing.rotation - nextRotation) < 0.01
+    ) {
+      return;
+    }
+
+    updateObject(objectId, {
+      x: nextX,
+      y: nextY,
+      rotation: nextRotation,
+    });
+  }, [updateObject]);
+
+  const applyPhysicsReset = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    for (const [objectId, body] of bodyMapRef.current.entries()) {
+      const snapshot = resetSnapshotRef.current.get(objectId);
+      const existing = useCanvasObjectsStore.getState().getObject(objectId);
+      if (!snapshot || !existing) continue;
+
+      const centerX = snapshot.x + existing.width / 2;
+      const centerY = snapshot.y + existing.height / 2;
+
+      Matter.Body.setVelocity(body, { x: 0, y: 0 });
+      Matter.Body.setAngularVelocity(body, 0);
+      Matter.Body.setPosition(body, { x: centerX, y: centerY });
+      Matter.Body.setAngle(body, snapshot.rotation);
+
+      updateObject(objectId, {
+        x: snapshot.x,
+        y: snapshot.y,
+        rotation: snapshot.rotation,
+      });
+
+      if (isPhysicsAuthority) {
+        emitUpdate(objectId, {
+          x: snapshot.x,
+          y: snapshot.y,
+          rotation: snapshot.rotation,
+        });
+      }
+    }
+  }, [emitUpdate, isPhysicsAuthority, updateObject]);
+
+  useEffect(() => {
+    if (!room || !roomPhysics.enabled) {
+      clearMatterRuntime();
+      return;
+    }
+
+    ensureMatterRuntime();
+    rebuildBodiesFromObjects();
+
+    if (resetSnapshotRef.current.size === 0) {
+      resetPhysicsSnapshotFromCurrentObjects();
+    }
+
+    return () => {
+      if (!room) {
+        clearMatterRuntime();
+      }
+    };
+  }, [
+    room,
+    roomPhysics.enabled,
+    physicsStructureSignature,
+    physicsPinnedSignature,
+    clearMatterRuntime,
+    ensureMatterRuntime,
+    rebuildBodiesFromObjects,
+    resetPhysicsSnapshotFromCurrentObjects,
+  ]);
+
+  useEffect(() => {
+    if (!roomPhysics.enabled) return;
+
+    for (const body of bodyMapRef.current.values()) {
+      body.restitution = roomPhysics.restitution;
+      body.frictionAir = roomPhysics.frictionAir;
+      body.friction = 0.1;
+    }
+  }, [roomPhysics.enabled, roomPhysics.frictionAir, roomPhysics.restitution]);
+
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.gravity.x = 0;
+    engine.gravity.y = roomPhysics.gravityY;
+  }, [roomPhysics.gravityY]);
+
+  useEffect(() => {
+    if (!roomPhysics.enabled) return;
+    applyPhysicsReset();
+  }, [applyPhysicsReset, roomPhysics.enabled, roomPhysics.resetNonce]);
+
+  useEffect(() => {
+    if (!roomPhysics.enabled || !roomPhysics.simulationRunning || !isPhysicsAuthority) {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      return;
+    }
+
+    ensureMatterRuntime();
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    const tick = () => {
+      Matter.Engine.update(engine, 1000 / 60);
+
+      const updates: Array<{ objectId: string; x: number; y: number; rotation: number }> = [];
+
+      for (const [objectId, body] of bodyMapRef.current.entries()) {
+        const existing = useCanvasObjectsStore.getState().getObject(objectId);
+        if (!existing) continue;
+
+        const x = body.position.x - existing.width / 2;
+        const y = body.position.y - existing.height / 2;
+        const rotation = body.angle;
+
+        const moved =
+          Math.abs(existing.x - x) >= 0.25 ||
+          Math.abs(existing.y - y) >= 0.25 ||
+          Math.abs(existing.rotation - rotation) >= 0.01;
+
+        syncObjectFromBody(objectId, body);
+        if (moved) {
+          updates.push({ objectId, x, y, rotation });
+        }
+      }
+
+      const now = performance.now();
+      if (room && now - lastSyncTsRef.current >= PHYSICS_SYNC_INTERVAL_MS) {
+        for (const update of updates) {
+          emitUpdate(update.objectId, {
+            x: update.x,
+            y: update.y,
+            rotation: update.rotation,
+          });
+        }
+        lastSyncTsRef.current = now;
+      }
+
+      animationFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [
+    emitUpdate,
+    ensureMatterRuntime,
+    isPhysicsAuthority,
+    room,
+    roomPhysics.enabled,
+    roomPhysics.simulationRunning,
+    syncObjectFromBody,
+  ]);
 
   useEffect(() => {
     if (!activeTool) return;
@@ -476,6 +968,19 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
 
       updateObject(objectId, updates);
+
+      const current = useCanvasObjectsStore.getState().getObject(objectId);
+      const body = bodyMapRef.current.get(objectId);
+      if (!current || !body || !isPhysicsObjectType(current.type)) return;
+
+      const nextX = typeof updates.x === 'number' ? updates.x : current.x;
+      const nextY = typeof updates.y === 'number' ? updates.y : current.y;
+      const nextRotation = typeof updates.rotation === 'number' ? updates.rotation : current.rotation;
+      Matter.Body.setPosition(body, {
+        x: nextX + current.width / 2,
+        y: nextY + current.height / 2,
+      });
+      Matter.Body.setAngle(body, nextRotation);
     };
 
     // Listen for object deletion from other clients
@@ -501,7 +1006,21 @@ export const Canvas: React.FC<CanvasProps> = ({
       socket.off('object:updated', handleObjectUpdated);
       socket.off('object:deleted', handleObjectDeleted);
     };
-  }, [room, updateObject, deleteObject]);
+  }, [deleteObject, room, updateObject]);
+
+  useEffect(() => {
+    if (!room) return;
+
+    const handlePhysicsState = (payload: PhysicsStatePayload) => {
+      if (!payload || payload.roomId !== room.id || !payload.state) return;
+      setRoomPhysics(payload.state);
+    };
+
+    socket.on('physics:state', handlePhysicsState);
+    return () => {
+      socket.off('physics:state', handlePhysicsState);
+    };
+  }, [room, setRoomPhysics]);
 
   // Update stage size on mount and resize
   useEffect(() => {
@@ -642,8 +1161,65 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (zoomRafRef.current !== null) {
         window.cancelAnimationFrame(zoomRafRef.current);
       }
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+      }
+      clearMatterRuntime();
     };
-  }, []);
+  }, [clearMatterRuntime]);
+
+  const selectedObject = useMemo(() => {
+    if (!selectedObjectId) return null;
+    return objects.find((object) => object.id === selectedObjectId) ?? null;
+  }, [objects, selectedObjectId]);
+
+  const selectedObjectSupportsPhysics = Boolean(selectedObject && isPhysicsObjectType(selectedObject.type));
+  const selectedObjectIsPinned = Boolean(selectedObject && pinnedSet.has(selectedObject.id));
+
+  const handleTogglePhysicsMode = useCallback(() => {
+    const nextEnabled = !roomPhysics.enabled;
+    if (nextEnabled) {
+      resetPhysicsSnapshotFromCurrentObjects();
+    }
+    emitPhysicsStatePatch({
+      enabled: nextEnabled,
+      simulationRunning: nextEnabled,
+    });
+  }, [emitPhysicsStatePatch, resetPhysicsSnapshotFromCurrentObjects, roomPhysics.enabled]);
+
+  const handleToggleSimulation = useCallback(() => {
+    if (!roomPhysics.enabled) return;
+    emitPhysicsStatePatch({
+      simulationRunning: !roomPhysics.simulationRunning,
+    });
+  }, [emitPhysicsStatePatch, roomPhysics.enabled, roomPhysics.simulationRunning]);
+
+  const handleAdjustGravity = useCallback((delta: number) => {
+    emitPhysicsStatePatch({
+      gravityY: Math.max(0, Math.min(10, roomPhysics.gravityY + delta)),
+    });
+  }, [emitPhysicsStatePatch, roomPhysics.gravityY]);
+
+  const handleAdjustRestitution = useCallback((delta: number) => {
+    emitPhysicsStatePatch({
+      restitution: Math.max(0, Math.min(1.2, Number((roomPhysics.restitution + delta).toFixed(2)))),
+    });
+  }, [emitPhysicsStatePatch, roomPhysics.restitution]);
+
+  const handleAdjustFrictionAir = useCallback((delta: number) => {
+    emitPhysicsStatePatch({
+      frictionAir: Math.max(0, Math.min(0.2, Number((roomPhysics.frictionAir + delta).toFixed(3)))),
+    });
+  }, [emitPhysicsStatePatch, roomPhysics.frictionAir]);
+
+  const handleTogglePinned = useCallback(() => {
+    if (!selectedObject || !selectedObjectSupportsPhysics) return;
+    emitPhysicsSetStatic(selectedObject.id, !selectedObjectIsPinned);
+  }, [emitPhysicsSetStatic, selectedObject, selectedObjectIsPinned, selectedObjectSupportsPhysics]);
+
+  const handleResetPhysics = useCallback(() => {
+    emitPhysicsReset();
+  }, [emitPhysicsReset]);
 
   return (
     <div className="canvas-surface" role="region" aria-label="Infinite canvas workspace" aria-busy={loadingPhase !== null}>
@@ -711,9 +1287,113 @@ export const Canvas: React.FC<CanvasProps> = ({
           </button>
         </div>
         <div className="toolbar-meta">
+          <button
+            type="button"
+            className={roomPhysics.enabled ? 'tool-btn active' : 'tool-btn'}
+            onClick={handleTogglePhysicsMode}
+            aria-label="Toggle physics mode"
+            title="Physics mode"
+          >
+            <span aria-hidden="true">PHY</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={handleToggleSimulation}
+            disabled={!roomPhysics.enabled}
+            aria-label="Toggle physics simulation"
+            title={roomPhysics.simulationRunning ? 'Pause simulation' : 'Resume simulation'}
+          >
+            <span aria-hidden="true">{roomPhysics.simulationRunning ? 'Pause' : 'Run'}</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => handleAdjustGravity(-0.1)}
+            disabled={!roomPhysics.enabled}
+            aria-label="Decrease gravity"
+            title="Decrease gravity"
+          >
+            <span aria-hidden="true">G-</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => handleAdjustGravity(0.1)}
+            disabled={!roomPhysics.enabled}
+            aria-label="Increase gravity"
+            title="Increase gravity"
+          >
+            <span aria-hidden="true">G+</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => handleAdjustRestitution(-0.05)}
+            disabled={!roomPhysics.enabled}
+            aria-label="Decrease restitution"
+            title="Decrease restitution"
+          >
+            <span aria-hidden="true">B-</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => handleAdjustRestitution(0.05)}
+            disabled={!roomPhysics.enabled}
+            aria-label="Increase restitution"
+            title="Increase restitution"
+          >
+            <span aria-hidden="true">B+</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => handleAdjustFrictionAir(-0.005)}
+            disabled={!roomPhysics.enabled}
+            aria-label="Decrease friction"
+            title="Decrease friction"
+          >
+            <span aria-hidden="true">F-</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => handleAdjustFrictionAir(0.005)}
+            disabled={!roomPhysics.enabled}
+            aria-label="Increase friction"
+            title="Increase friction"
+          >
+            <span aria-hidden="true">F+</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={handleTogglePinned}
+            disabled={!roomPhysics.enabled || !selectedObjectSupportsPhysics}
+            aria-label="Toggle static object"
+            title={selectedObjectIsPinned ? 'Unpin selected object' : 'Pin selected object'}
+          >
+            <span aria-hidden="true">{selectedObjectIsPinned ? 'Unpin' : 'Pin'}</span>
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={handleResetPhysics}
+            disabled={!roomPhysics.enabled}
+            aria-label="Reset physics simulation"
+            title="Reset physics simulation"
+          >
+            <span aria-hidden="true">Reset</span>
+          </button>
           <span className={loadingPhase ? 'users-chip users-chip--loading' : 'users-chip'} aria-label={`Users in room: ${participantCount}`}>
             {loadingPhase ? 'Syncing...' : `${participantCount} users`}
           </span>
+          {roomPhysics.enabled ? (
+            <span className="users-chip" aria-label="Physics status">
+              {isPhysicsAuthority ? 'Physics Host' : 'Physics Follower'} | g {roomPhysics.gravityY.toFixed(1)} | b {roomPhysics.restitution.toFixed(2)} | f {roomPhysics.frictionAir.toFixed(3)}
+            </span>
+          ) : null}
           {uploadInProgress && uploadLabel ? (
             <span className="users-chip users-chip--loading" aria-label="Upload in progress">
               {uploadLabel} {uploadProgress}%
@@ -775,6 +1455,9 @@ export const Canvas: React.FC<CanvasProps> = ({
               key={obj.id}
               object={obj}
               selected={selectedObjectId === obj.id}
+              draggable={!(roomPhysics.enabled && roomPhysics.simulationRunning && isPhysicsObjectType(obj.type) && pinnedSet.has(obj.id))}
+              onDragStart={() => handleObjectDragStart(obj.id)}
+              onDragMove={(x, y) => handleObjectDragMove(obj.id, x, y)}
               onMove={(x, y) => {
                 moveObjectAndSync(obj.id, x, y);
               }}
