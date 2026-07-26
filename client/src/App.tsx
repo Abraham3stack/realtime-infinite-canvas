@@ -1,4 +1,4 @@
-import { FC, useCallback, useMemo, useState } from 'react';
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConnectionStatus } from './hooks/useConnectionStatus.js';
 import { useCreateSession } from './hooks/useAuth.js';
 import { useCreateRoom, useJoinRoom, useLeaveRoom, useRoomAutoRejoin, useRoomUserJoined, useRoomUserLeft } from './hooks/useRoom.js';
@@ -8,6 +8,7 @@ import { Canvas } from './components/Canvas.js';
 import { LoadingButton } from './components/ui/LoadingButton.js';
 import { SkeletonBlock } from './components/ui/SkeletonBlock.js';
 import { StatusBadge } from './components/ui/StatusBadge.js';
+import { clearPersistedRoom, readPersistedRoom } from './utils/persistence.js';
 
 type ActionLoading = 'create-session' | 'create-room' | 'join-room' | 'leave-room' | null;
 type CopyLoading = 'room-id' | 'share-code' | null;
@@ -57,9 +58,48 @@ const App: FC = () => {
   } = useRoomHydrationLoading();
 
   const connectedCount = useMemo(() => participants.filter((participant) => participant.isActive).length, [participants]);
+  const attemptedStartupRoomRestoreRef = useRef(false);
 
   useConnectionToasts(status, showToast);
   useRoomAutoRejoin();
+
+  useEffect(() => {
+    if (!session || room || sessionLoading) return;
+    if (attemptedStartupRoomRestoreRef.current) return;
+
+    attemptedStartupRoomRestoreRef.current = true;
+
+    const persistedRoom = readPersistedRoom();
+    if (!persistedRoom?.roomId) {
+      return;
+    }
+
+    setLoadingAction('join-room');
+    beginRoomLoading();
+
+    void joinRoom(persistedRoom.roomId, persistedRoom.shareCode || undefined)
+      .then(() => {
+        completeRoomLoading();
+        showToast('Welcome back. Restored your previous room.');
+      })
+      .catch(() => {
+        clearPersistedRoom();
+        resetRoomLoading();
+        showToast('Session restored, but your previous room could not be reopened.');
+      })
+      .finally(() => {
+        setLoadingAction(null);
+      });
+  }, [
+    beginRoomLoading,
+    completeRoomLoading,
+    joinRoom,
+    resetRoomLoading,
+    room,
+    session,
+    sessionLoading,
+    showToast,
+  ]);
 
   const copyToClipboard = async (value: string, label: string, loadingKey: Exclude<CopyLoading, null>) => {
     try {

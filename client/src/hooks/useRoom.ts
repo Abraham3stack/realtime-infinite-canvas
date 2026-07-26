@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { socket } from '../socket.js';
 import { useRoomStore } from '../store/room.js';
 import { useCanvasObjectsStore, type CanvasObject } from '../store/objects.js';
+import { clearPersistedRoom, writePersistedRoom } from '../utils/persistence.js';
 
 interface RoomCreateResponse {
   code?: string;
@@ -73,6 +74,10 @@ export function useCreateRoom() {
             lastSeenAt: p.lastSeenAt as string,
             isActive: p.isActive as boolean,
           })));
+
+          if (response.roomId && response.shareCode) {
+            writePersistedRoom({ roomId: response.roomId, shareCode: response.shareCode });
+          }
           resolve();
         });
       });
@@ -124,6 +129,14 @@ export function useJoinRoom() {
           const canvasObjects = (response.canvasObjects || []) as Array<Record<string, unknown>>;
           setObjects(canvasObjects as unknown as CanvasObject[]);
 
+          const resolvedRoomId = response.roomId || roomId || '';
+          if (resolvedRoomId) {
+            writePersistedRoom({
+              roomId: resolvedRoomId,
+              shareCode: shareCode || '',
+            });
+          }
+
           resolve();
         });
       });
@@ -151,6 +164,7 @@ export function useLeaveRoom() {
         }
         clearRoom();
         clearObjects();
+        clearPersistedRoom();
         resolve();
       });
     });
