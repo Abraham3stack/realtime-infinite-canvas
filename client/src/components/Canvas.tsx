@@ -105,6 +105,8 @@ const PHYSICS_FIELD_MAX_FORCE = 0.00045;
 const PHYSICS_FIELD_MIN_DISTANCE_PX = 14;
 const PRESENCE_SYNC_INTERVAL_MS = 120;
 const REPLAY_BASE_STEP_INTERVAL_MS = 250;
+const QUICKSTART_FIRST_VISIT_KEY = 'ric:first-visit-recorded';
+const QUICKSTART_SUPPRESS_KEY = 'ric:quickstart-suppress';
 
 function isPhysicsObjectType(type: CanvasObjectType): boolean {
   return PHYSICS_OBJECT_TYPE_SET.has(type);
@@ -563,6 +565,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [replayEvents, setReplayEvents] = useState<RoomEvent[]>([]);
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1);
+  const [isQuickStartOpen, setIsQuickStartOpen] = useState(false);
+  const [suppressQuickStart, setSuppressQuickStart] = useState(false);
   const [fieldMode, setFieldMode] = useState<FieldMode>(null);
   const [isPhysicsControlsExpanded, setIsPhysicsControlsExpanded] = useState(false);
   const shapeMenuRef = useRef<HTMLDivElement>(null);
@@ -679,6 +683,26 @@ export const Canvas: React.FC<CanvasProps> = ({
     return response.events ?? [];
   }, [room]);
 
+  const closeQuickStart = useCallback(() => {
+    setIsQuickStartOpen(false);
+
+    if (typeof window === 'undefined') return;
+
+    try {
+      if (suppressQuickStart) {
+        window.localStorage.setItem(QUICKSTART_SUPPRESS_KEY, '1');
+      } else {
+        window.localStorage.removeItem(QUICKSTART_SUPPRESS_KEY);
+      }
+    } catch {
+      // Ignore localStorage failures in restricted browser contexts.
+    }
+  }, [suppressQuickStart]);
+
+  const openQuickStart = useCallback(() => {
+    setIsQuickStartOpen(true);
+  }, []);
+
   const enterReplayMode = useCallback(async () => {
     if (!room || isReplayLoading) return;
 
@@ -778,6 +802,42 @@ export const Canvas: React.FC<CanvasProps> = ({
     setEditingTextObjectId(null);
     setEditingTextValue('');
   }, [room?.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const hasVisited = window.localStorage.getItem(QUICKSTART_FIRST_VISIT_KEY) === '1';
+      const isSuppressed = window.localStorage.getItem(QUICKSTART_SUPPRESS_KEY) === '1';
+      setSuppressQuickStart(isSuppressed);
+
+      if (!hasVisited) {
+        window.localStorage.setItem(QUICKSTART_FIRST_VISIT_KEY, '1');
+        if (!isSuppressed) {
+          setIsQuickStartOpen(true);
+        }
+      }
+    } catch {
+      // If storage is unavailable, still show onboarding once for this runtime.
+      setIsQuickStartOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isQuickStartOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeQuickStart();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeQuickStart, isQuickStartOpen]);
 
   useEffect(() => {
     if (!roomPhysics.enabled || !roomPhysics.simulationRunning) {
@@ -2399,7 +2459,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                     setIsShapeMenuOpen((current) => !current);
                   }}
                   disabled={isReplayMode}
-                  title={`Shape (${selectedShapeConfig?.label ?? 'Rectangle'})`}
+                  title={`Choose shape tool (${selectedShapeConfig?.label ?? 'Rectangle'})`}
                   aria-label={`Shape menu (${selectedShapeConfig?.label ?? 'Rectangle'})`}
                   aria-expanded={isShapeMenuOpen}
                   aria-haspopup="menu"
@@ -2443,7 +2503,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                     setActiveTool(null);
                   }}
                   disabled={isReplayMode}
-                  title={tool.type === 'text' ? `${tool.label} (${tool.hotkey}) - click canvas to place` : `${tool.label} (${tool.hotkey})`}
+                  title={tool.type === 'text' ? 'Create text: select tool, then click canvas to place' : 'Create sticky note'}
                   aria-label={tool.type === 'text' ? `${tool.label} tool (${tool.hotkey})` : `${tool.label} (${tool.hotkey})`}
                 >
                   <span aria-hidden="true">{tool.icon}</span>
@@ -2454,7 +2514,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={() => openUploadPicker('image')}
                 disabled={uploadInProgress || isReplayMode}
-                title="Upload and insert an image onto the canvas"
+                title="Create image: upload, then place on canvas"
                 aria-label="Upload image"
               >
                 <span aria-hidden="true">Image</span>
@@ -2464,7 +2524,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={() => openUploadPicker('audio')}
                 disabled={uploadInProgress || isReplayMode}
-                title="Upload and insert audio onto the canvas"
+                title="Create audio: upload, then place on canvas"
                 aria-label="Upload audio"
               >
                 <span aria-hidden="true">Audio</span>
@@ -2474,7 +2534,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={() => openUploadPicker('video')}
                 disabled={uploadInProgress || isReplayMode}
-                title="Upload and insert video onto the canvas"
+                title="Create video: upload, then place on canvas"
                 aria-label="Upload video"
               >
                 <span aria-hidden="true">Video</span>
@@ -2484,7 +2544,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={handleExportPng}
                 disabled={isReplayMode}
-                title="Save canvas as PNG image (for sharing and presentations)"
+                title="Export as image"
                 aria-label="Export PNG"
               >
                 <span aria-hidden="true">PNG</span>
@@ -2494,7 +2554,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={handleExportSvg}
                 disabled={isReplayMode}
-                title="Save as SVG vector (editable in design tools like Figma or Illustrator)"
+                title="Export as vector graphic"
                 aria-label="Export SVG"
               >
                 <span aria-hidden="true">SVG</span>
@@ -2504,7 +2564,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 className="tool-btn"
                 onClick={handleExportJson}
                 disabled={isReplayMode}
-                title="Save as JSON data (for backup or integration with other tools)"
+                title="Export project data"
                 aria-label="Export JSON"
               >
                 <span aria-hidden="true">JSON</span>
@@ -2515,10 +2575,19 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => {
                   void handleReplayPanelToggle();
                 }}
-                title={isReplayMode ? 'Exit replay mode and return to live canvas' : 'Open replay panel to watch event history'}
+                title={isReplayMode ? 'Exit replay mode' : 'Replay session history'}
                 aria-label={isReplayMode ? 'Exit replay mode' : 'Open replay panel'}
               >
                 <span aria-hidden="true">Replay</span>
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                onClick={openQuickStart}
+                title="Open quick start help"
+                aria-label="Open quick start help"
+              >
+                <span aria-hidden="true">?</span>
               </button>
             </div>
           </div>
@@ -2538,7 +2607,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={isReplayMode}
                 aria-label="Toggle physics mode"
                 aria-pressed={roomPhysics.enabled}
-                title="Enable physics simulation: gravity, bouncing, throwing, and force fields"
+                title="Enable physics controls"
               >
                 <span aria-hidden="true">Physics</span>
               </button>
@@ -2549,7 +2618,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Toggle physics simulation"
                 aria-pressed={roomPhysics.simulationRunning}
-                title={roomPhysics.enabled ? (roomPhysics.simulationRunning ? 'Pause physics simulation' : 'Start physics simulation') : 'Enable Physics first to use this control'}
+                title={roomPhysics.enabled ? (roomPhysics.simulationRunning ? 'Pause simulation' : 'Start simulation') : 'Enable physics controls first'}
               >
                 <span aria-hidden="true">{roomPhysics.simulationRunning ? 'Pause' : 'Run'}</span>
               </button>
@@ -2573,7 +2642,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => handleAdjustGravity(-0.1)}
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Decrease gravity"
-                title="Decrease gravity"
+                title="Gravity: decrease falling strength"
               >
                 <span aria-hidden="true">G-</span>
               </button>
@@ -2583,7 +2652,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => handleAdjustGravity(0.1)}
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Increase gravity"
-                title="Increase gravity"
+                title="Gravity: increase falling strength"
               >
                 <span aria-hidden="true">G+</span>
               </button>
@@ -2593,7 +2662,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => handleAdjustRestitution(-0.05)}
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Decrease restitution"
-                title="Decrease restitution"
+                title="Bounce: decrease restitution"
               >
                 <span aria-hidden="true">B-</span>
               </button>
@@ -2603,7 +2672,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => handleAdjustRestitution(0.05)}
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Increase restitution"
-                title="Increase restitution"
+                title="Bounce: increase restitution"
               >
                 <span aria-hidden="true">B+</span>
               </button>
@@ -2613,7 +2682,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => handleAdjustFrictionAir(-0.005)}
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Decrease friction"
-                title="Decrease friction"
+                title="Friction: decrease movement damping"
               >
                 <span aria-hidden="true">F-</span>
               </button>
@@ -2623,7 +2692,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={() => handleAdjustFrictionAir(0.005)}
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Increase friction"
-                title="Increase friction"
+                title="Friction: increase movement damping"
               >
                 <span aria-hidden="true">F+</span>
               </button>
@@ -2634,7 +2703,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || !selectedObjectSupportsPhysics || isReplayMode}
                 aria-label="Toggle static object"
                 aria-pressed={selectedObjectIsPinned}
-                title={selectedObjectIsPinned ? 'Unpin selected object' : 'Pin selected object'}
+                title={selectedObjectIsPinned ? 'Unlock selected object' : 'Lock selected object'}
               >
                 <span aria-hidden="true">{selectedObjectIsPinned ? 'Unpin' : 'Pin'}</span>
               </button>
@@ -2644,7 +2713,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onClick={handleResetPhysics}
                 disabled={!roomPhysics.enabled || isReplayMode}
                 aria-label="Reset physics simulation"
-                title="Reset physics simulation"
+                title="Restore initial physics state"
               >
                 <span aria-hidden="true">Reset</span>
               </button>
@@ -2655,7 +2724,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
                 aria-label="Toggle attraction field"
                 aria-pressed={fieldMode === 'attract'}
-                title="Enable force field that pulls nearby objects toward center (radius: 340px)"
+                title="Pull nearby objects while mouse is held"
               >
                 <span aria-hidden="true">Attract</span>
               </button>
@@ -2666,7 +2735,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 disabled={!roomPhysics.enabled || isReplayMode || !isPhysicsAuthority}
                 aria-label="Toggle repulsion field"
                 aria-pressed={fieldMode === 'repel'}
-                title="Enable force field that pushes nearby objects away from center (radius: 340px)"
+                title="Push nearby objects while mouse is held"
               >
                 <span aria-hidden="true">Repel</span>
               </button>
@@ -2756,6 +2825,125 @@ export const Canvas: React.FC<CanvasProps> = ({
           </div>
         </div>
       </div>
+
+      {isQuickStartOpen ? (
+        <div
+          className="quickstart-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Quick start onboarding"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeQuickStart();
+            }
+          }}
+        >
+          <article className="quickstart-card" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="quickstart-header">
+              <p className="quickstart-eyebrow">Quick Start</p>
+              <h2>How to use the canvas in under a minute</h2>
+            </header>
+
+            <div className="quickstart-steps">
+              <section className="quickstart-step">
+                <h3>1. Create or join a room</h3>
+                <ul>
+                  <li>Start by creating a room or joining one with a code.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>2. Create objects</h3>
+                <ul>
+                  <li>Use Shape, Text, Sticky Note, Image, Audio, or Video.</li>
+                  <li>After selecting a creation tool, click the canvas to place the object.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>3. Move objects</h3>
+                <ul>
+                  <li>Drag objects directly to reposition them.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>4. Physics controls</h3>
+                <ul>
+                  <li>Physics: enable physics controls.</li>
+                  <li>Run: start simulation.</li>
+                  <li>Pin: lock or unlock the selected object.</li>
+                  <li>Gravity: changes falling strength.</li>
+                  <li>Bounce: changes restitution.</li>
+                  <li>Friction: controls movement damping.</li>
+                  <li>Reset: restores initial physics state.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>5. Throw physics</h3>
+                <ul>
+                  <li>While simulation is running, drag a physics-enabled object quickly and release.</li>
+                  <li>The object keeps its momentum.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>6. Force fields</h3>
+                <ul>
+                  <li>Attract: hold mouse down to pull nearby movable physics objects.</li>
+                  <li>Repel: hold mouse down to push nearby movable physics objects.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>7. Replay</h3>
+                <ul>
+                  <li>Open Replay to inspect session history.</li>
+                  <li>Use Play, Pause, Step, Restart, timeline scrubber, and speed controls.</li>
+                  <li>Replay reconstructs the room state from journaled events.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>8. Collaborate</h3>
+                <ul>
+                  <li>Share the room code so others can join and edit in realtime.</li>
+                </ul>
+              </section>
+
+              <section className="quickstart-step">
+                <h3>9. Export</h3>
+                <ul>
+                  <li>PNG: image</li>
+                  <li>SVG: vector graphic</li>
+                  <li>JSON: project/session data</li>
+                </ul>
+              </section>
+            </div>
+
+            <footer className="quickstart-footer">
+              <label className="quickstart-checkbox">
+                <input
+                  type="checkbox"
+                  checked={suppressQuickStart}
+                  onChange={(event) => setSuppressQuickStart(event.target.checked)}
+                />
+                <span>Don’t show again</span>
+              </label>
+
+              <div className="quickstart-actions">
+                <button type="button" className="primary-btn" onClick={closeQuickStart}>
+                  Start Exploring
+                </button>
+                <button type="button" className="ghost-btn" onClick={closeQuickStart}>
+                  Skip
+                </button>
+              </div>
+            </footer>
+          </article>
+        </div>
+      ) : null}
 
       {isReplayPanelOpen ? (
         <aside className="replay-panel" aria-label="Replay controls panel">

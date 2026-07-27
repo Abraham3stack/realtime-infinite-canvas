@@ -1,268 +1,168 @@
-# Data Model (Prisma Design Contract)
+# Data Model
 
-This document defines the minimum Prisma data model required for MVP delivery.
+This document reflects the implemented Prisma schema in `server/prisma/schema.prisma`.
 
-Design principles:
+## Overview
 
-- Keep schema minimal and hackathon-safe.
-- Favor flexibility over early deep normalization.
-- Store media binaries in Cloudinary, not in database.
-- Store only metadata and URLs for media objects.
+The server uses PostgreSQL with Prisma and six core models:
 
-## Model: GuestUser
+- `GuestUser`
+- `GuestSession`
+- `Room`
+- `RoomParticipant`
+- `CanvasObject`
+- `RoomEvent`
 
-### Purpose
+## 1. GuestUser
 
-Represents a lightweight guest identity based on a display name.
+Purpose:
 
-### Relationships
+- lightweight identity with display name.
 
-- One GuestUser can have many GuestSessions.
+Fields:
 
-### Fields
+- `id` (uuid, PK)
+- `displayName`
+- `createdAt`
+- `updatedAt`
 
-- id: unique identifier
-- displayName: guest username shown in room
-- createdAt: creation timestamp
-- updatedAt: optional update timestamp
+Relations:
 
-### Constraints
+- one-to-many `GuestSession`
 
-- displayName required
-- displayName length bounded
+## 2. GuestSession
 
----
+Purpose:
 
-## Model: GuestSession
+- authenticated guest access for REST and socket flows.
 
-### Purpose
+Fields:
 
-Represents an active lightweight session for a guest user.
+- `id` (uuid, PK)
+- `userId` (FK -> `GuestUser.id`)
+- `sessionTokenHash` (unique, fixed-length char(64))
+- `expiresAt`
+- `createdAt`
+- `updatedAt`
 
-### Relationships
+Relations:
 
-- Many GuestSessions belong to one GuestUser.
-- One GuestSession can join many RoomParticipants.
-- One GuestSession may create many Rooms.
+- many-to-one `GuestUser`
+- one-to-many `Room` (created rooms)
+- one-to-many `RoomParticipant`
+- one-to-many `RoomEvent` (actor session)
 
-### Fields
+## 3. Room
 
-- id: unique identifier
-- userId: foreign key to GuestUser
-- sessionTokenHash: hashed token or opaque session identifier reference
-- expiresAt: session expiration timestamp
-- createdAt: creation timestamp
-- updatedAt: optional update timestamp
+Purpose:
 
-### Constraints
+- collaborative room identity and ordering cursor for journal events.
 
-- userId required and must reference existing GuestUser
-- session token must be unique
-- expired sessions are not valid for write operations
+Fields:
 
-### Relationships
+- `id` (uuid, PK)
+- `shareCode` (unique)
+- `createdBySessionId` (FK -> `GuestSession.id`)
+- `title` (nullable)
+- `eventSequenceNumber` (int, default 0)
+- `createdAt`
+- `updatedAt`
 
-- One GuestSession can author many RoomEvents.
+Relations:
 
----
+- many-to-one creator `GuestSession`
+- one-to-many `RoomParticipant`
+- one-to-many `CanvasObject`
+- one-to-many `RoomEvent`
 
-## Model: Room
+## 4. RoomParticipant
 
-### Purpose
+Purpose:
 
-Represents a collaborative canvas room.
+- room membership and last known viewport state.
 
-### Relationships
+Fields:
 
-- One Room has many RoomParticipants.
-- One Room has many CanvasObjects.
-- One Room is created by one GuestSession.
+- `id` (uuid, PK)
+- `roomId` (FK -> `Room.id`)
+- `sessionId` (FK -> `GuestSession.id`)
+- `joinedAt`
+- `lastSeenAt`
+- `isActive`
+- `lastViewportX` (nullable)
+- `lastViewportY` (nullable)
+- `lastViewportZoom` (nullable)
 
-### Fields
+Constraints:
 
-- id: unique identifier
-- shareCode: human-shareable code or slug
-- createdBySessionId: foreign key to GuestSession
-- title: optional room title
-- eventSequenceNumber: server-owned monotonic counter for RoomEvent ordering
-- createdAt: creation timestamp
-- updatedAt: update timestamp
+- unique composite key: `@@unique([roomId, sessionId])`
 
-### Constraints
+## 5. CanvasObject
 
-- shareCode unique
-- createdBySessionId required
-- eventSequenceNumber required for deterministic journal sequencing
-
----
-
-## Model: RoomParticipant
-
-### Purpose
-
-Tracks membership and presence state of a session inside a room.
-
-### Relationships
-
-- Many RoomParticipants belong to one Room.
-- Many RoomParticipants belong to one GuestSession.
-
-### Fields
-
-- id: unique identifier
-- roomId: foreign key to Room
-- sessionId: foreign key to GuestSession
-- joinedAt: timestamp when participant joined
-- lastSeenAt: heartbeat timestamp
-- isActive: active or disconnected marker
-- lastViewportX: optional latest viewport x
-- lastViewportY: optional latest viewport y
-- lastViewportZoom: optional latest viewport zoom
-
-### Constraints
-
-- roomId required
-- sessionId required
-- unique roomId + sessionId pair to prevent duplicate active membership rows
-
----
-
-## Model: CanvasObject
-
-### Purpose
-
-Stores canonical object state for each item rendered on the collaborative canvas.
-
-### Relationships
-
-- Many CanvasObjects belong to one Room.
-- Many CanvasObjects are created by one GuestSession.
-
-### Fields
-
-- id: unique identifier
-- roomId: foreign key to Room
-- createdBySessionId: foreign key to GuestSession
-- type: object type enum (text, shape, sticky, image, audio, video)
-- x: position x
-- y: position y
-- width: optional width
-- height: optional height
-- rotation: optional rotation angle
-- zIndex: layering order
-- version: monotonic version for conflict handling
-- mediaUrl: Cloudinary secure URL (image/audio/video)
-- mediaPublicId: Cloudinary public identifier
-- mediaResourceType: Cloudinary resource type
-- mediaFormat: detected media format
-- mediaWidth: optional media width
-- mediaHeight: optional media height
-- mimeType: uploaded MIME type
-- sizeBytes: uploaded file size
-- durationMs: optional duration for audio/video
-- mediaCreatedAt: Cloudinary creation timestamp
-- deletedAt: optional soft-delete timestamp
-- createdAt: creation timestamp
-- updatedAt: update timestamp
-
-### Constraints
-
-- roomId required
-- type must be one of accepted object enums
-- version required and incremented on each mutation
-
----
-
-## Model: RoomEvent (Bonus Feature Only - Time Travel)
-
-**MVP Status: IMPLEMENTED AS REPLAY FOUNDATION**
-
-RoomEvent is the append-only journal used as the replay foundation.
-
-It stores ordered event history for session replay support while current room hydration remains snapshot-based.
-
-### Relationships
-
-- Many RoomEvents belong to one Room.
-- Many RoomEvents are authored by one GuestSession.
-
-### Fields
-
-- id: unique identifier
-- roomId: foreign key to Room
-- sequenceNumber: room-scoped monotonic ordering key
-- operationId: client/server correlation id
-- actorSessionId: foreign key to GuestSession
-- actorDisplayName: actor display name captured at write time
-- eventType: mutation category
-- payload: minimal event payload required to reconstruct the action
-- schemaVersion: journal payload schema version
-- createdAt: write timestamp
-
-### Constraints
-
-- RoomEvent entries are immutable and append-only.
-- sequenceNumber is unique per room and assigned server-side.
-- operationId is unique per room to prevent duplicate journal entries.
-- Event writes do not replace the existing CanvasObject snapshot path.
-
----
-
-## Model: MediaAsset (Recommended Minimal Table)
-
-### Purpose
-
-Tracks Cloudinary media metadata separately for lifecycle management and cleanup.
-
-### Relationships
-
-- Many MediaAssets belong to one Room.
-- Many MediaAssets can be referenced by one CanvasObject over time (if object is updated).
-- Many MediaAssets are uploaded by one GuestSession.
-
-### Fields
-
-- id: unique identifier
-- roomId: foreign key to Room
-- objectId: optional foreign key to CanvasObject
-- uploadedBySessionId: foreign key to GuestSession
-- mediaType: enum (image, audio, video)
-- url: Cloudinary delivery URL
-- publicId: Cloudinary public identifier
-- mimeType: MIME type
-- sizeBytes: file size in bytes
-- durationMs: optional duration for audio/video
-- width: optional width for image/video
-- height: optional height for image/video
-- createdAt: upload timestamp
-- deletedAt: optional soft-delete timestamp
-
-### Constraints
-
-- url required
-- publicId required and unique
-- mediaType required
-
----
-
-## Notes on Constraints and Simplicity (MVP)
-
-- Use soft delete fields where practical to reduce accidental data loss during live collaboration.
-- Keep media binaries in Cloudinary and only metadata in PostgreSQL.
-- Avoid creating per-object subtype tables during MVP.
-- Avoid role/permission tables until requirements demand them.
-- RoomEvent traceability is now the foundation for future session replay.
-- MediaAsset is optional for MVP; implemented metadata currently lives directly on CanvasObject columns.
-
-## Migration and Evolution Guidance
-
-- Start with the models above only.
-- Add fields only when a concrete feature needs them.
-- Any schema change must update this document before implementation.
-
-## Data Integrity Expectations (MVP)
-
-- Every write operation must validate payload shape before persistence.
-- Every room-scoped operation must verify room membership.
-- CanvasObject version and updatedAt fields track change history for LWW conflict resolution.
-- RoomEvent-based traceability is implemented as the replay foundation.
+Purpose:
+
+- canonical persisted state for objects on a room canvas.
+
+Fields:
+
+- identity and room
+  - `id` (uuid, PK)
+  - `roomId` (FK -> `Room.id`)
+  - `createdBySessionId`
+- core transform
+  - `x`, `y`, `zIndex`, `rotation`
+  - `width`, `height`
+- lifecycle and concurrency
+  - `version` (default 1)
+  - `lastServerSeq` (default 0)
+  - `createdAt`, `updatedAt`, `deletedAt`
+- type discriminator
+  - `type` (stored values include `shape`, `text`, `sticky`, `image`, `audio`, `video`)
+  - `shapeType` for shape variants (`rectangle`, `circle`, `triangle`)
+- text/sticky fields
+  - `content`, `fontSize`, `fontFamily`, `color`
+  - `backgroundColor`, `textColor`
+- media metadata fields
+  - `mediaUrl`, `mediaPublicId`, `mediaResourceType`, `mediaFormat`
+  - `mediaWidth`, `mediaHeight`, `mimeType`, `sizeBytes`, `durationMs`, `mediaCreatedAt`
+
+Notes:
+
+- This is a single-table strategy with nullable type-specific columns.
+- Client-facing type mapping is handled in server object handlers.
+
+## 6. RoomEvent
+
+Purpose:
+
+- append-only room-scoped mutation journal for replay and traceability.
+
+Fields:
+
+- `id` (uuid, PK)
+- `roomId` (FK -> `Room.id`)
+- `sequenceNumber` (room-scoped monotonic int)
+- `operationId` (client/server correlation id)
+- `actorSessionId` (FK -> `GuestSession.id`)
+- `actorDisplayName`
+- `eventType`
+- `payload` (JSON)
+- `schemaVersion` (default 1)
+- `createdAt`
+
+Constraints and indexes:
+
+- `@@unique([roomId, sequenceNumber])`
+- `@@unique([roomId, operationId])`
+- indexes on `(roomId, createdAt)` and `(roomId, eventType)`
+
+## Implemented Event Types in Journal
+
+Current event types written by server handlers:
+
+- `object:create`
+- `object:update`
+- `object:delete`
+- `physics:update-state`
+- `physics:set-static`
+- `physics:reset`

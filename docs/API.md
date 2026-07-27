@@ -6,6 +6,10 @@
 
 Creates a guest user and an expiring session.
 
+Implementation note:
+
+- Session expiry is currently 24 hours from issuance.
+
 Request body:
 
 - displayName: string (1-50 chars)
@@ -106,6 +110,17 @@ Typical error codes:
 - MEDIA_UPLOAD_FAILED
 - SESSION_INVALID
 - INVALID_PAYLOAD
+
+## Health
+
+### GET /health
+
+Simple availability endpoint.
+
+Success `200`:
+
+- status: `ok`
+- timestamp: ISO string
 
 ## Notes
 

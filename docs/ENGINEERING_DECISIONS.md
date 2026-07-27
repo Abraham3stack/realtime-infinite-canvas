@@ -1,680 +1,183 @@
 # Engineering Decisions
 
-This document explains the major technical choices and their rationale.
+This document records key decisions that are directly reflected in the current implementation.
 
----
+## 1. Monorepo with Shared Package
 
-## Frontend Framework
+Decision:
 
-### Decision: React 18 + TypeScript
+- Keep client and server in one repo with a `shared` workspace package.
 
-**Context:**  
-Building a collaborative canvas requires frequent re-renders and complex state management. Evaluated: React, Vue, Svelte.
+Why:
 
-**Alternatives Considered:**
+- Shared event/type contracts reduce drift between frontend and backend.
+- Replay engine can be reused by client runtime and tested independently.
 
-- **Vue 3**: Strong reactivity model, smaller bundle. Trade-off: smaller ecosystem, fewer architectural patterns documented.
-- **Svelte**: Smallest bundle, excellent performance. Trade-off: smaller community, less TypeScript tooling maturity.
-- **Vanilla JS + WebGL**: Maximum performance. Trade-off: high maintenance burden, no component model.
+Evidence:
 
-**Decision: React**
+- `package.json` workspaces: `client`, `server`, `shared`
+- shared contracts in `shared/src/types/*`
+- replay engine in `shared/src/replay/engine.ts`
 
-**Why:**
+Tradeoff:
 
-- Largest ecosystem (Canvas libraries, validation tools, routing)
-- Excellent TypeScript support and IDE integration
-- Well-documented patterns for complex UIs
-- Strong adoption among senior engineers (better for maintenance)
-- HMR support via Vite excellent for developer experience
+- Build/test commands span multiple workspaces and are slightly heavier than a single package.
 
-**Tradeoffs:**
+## 2. Guest Session Authentication
 
-- Larger initial bundle (mitigated by tree-shaking, lazy loading)
-- Requires discipline to avoid re-render cascades
-- TypeScript adds compile step (acceptable given Vite speed)
+Decision:
 
----
+- Use guest sessions with server-issued bearer tokens instead of account-based auth.
 
-## State Management
+Why:
 
-### Decision: Zustand (not Redux)
+- Minimal onboarding friction for collaborative rooms.
+- Sufficient for hackathon scope where sensitive data is not the primary focus.
 
-**Context:**  
-Canvas needs real-time state synchronization across components. Evaluated: Redux, Zustand, MobX, Jotai.
+Evidence:
 
-**Alternatives Considered:**
+- `POST /auth/guest` in `server/src/routes/auth.ts`
+- session verification in `server/src/socket/middleware/auth.ts`
+- protected media route via `requireSession`
 
-- **Redux**: Industry standard, time-travel debugging. Trade-off: verbose boilerplate, steep learning curve.
-- **MobX**: Elegant reactive model. Trade-off: "magic" can surprise, harder to debug.
-- **React Context**: Built-in. Trade-off: performance issues with frequent updates.
-- **Jotai**: Atomic model similar to Zustand. Trade-off: less proven, smaller community.
+Tradeoff:
 
-**Decision: Zustand**
+- No persistent account identity, permissions, or ownership model.
 
-**Why:**
+## 3. Socket.IO for Realtime Synchronization
 
-- Minimal boilerplate (actions are plain functions)
-- Direct Immer integration (immutable updates readable)
-- Excellent TypeScript inference
-- No provider wrapping needed
-- Scales to many stores without performance hit
-- Easy to test (stores are just objects)
+Decision:
 
-**Tradeoffs:**
+- Use Socket.IO room-scoped broadcasts for collaboration events.
 
-- Less time-travel debugging than Redux
-- Fewer middleware ecosystem plugins
-- Smaller community than Redux (but growing)
+Why:
 
-**Implementation:**
+- Built-in reconnect behavior and room broadcast semantics simplify implementation.
+- Callback patterns for room lifecycle APIs enable snapshot hydration responses.
 
-```typescript
-// Clean, readable store definitions
-const objectsStore = create((set) => ({
-  objects: [],
-  addObject: (type) =>
-    set((state) => ({
-      objects: [...state.objects, { id: uuid(), type }],
-    })),
-}));
-```
+Evidence:
 
----
+- socket registration in `server/src/socket/index.ts`
+- room/object/presence/physics handlers under `server/src/socket/handlers/`
 
-## Canvas Rendering
+Tradeoff:
 
-### Decision: Konva.js (not Raw Canvas or Three.js)
+- Socket protocol is server-centric; horizontal scale requires an adapter that is not yet implemented.
 
-**Context:**  
-Need to render 100+ interactive objects with transforms, selections, and real-time updates. Evaluated: Konva, Pixi, Babylon.js, raw Canvas API.
+## 4. Snapshot Hydration + Incremental Events
 
-**Alternatives Considered:**
+Decision:
 
-- **Raw Canvas API**: Highest control and performance. Trade-off: manual event handling, transform matrix math, no selection tools.
-- **Pixi.js**: Ultra-optimized for 2D. Trade-off: less abstraction, smaller ecosystem, no transform controls out-of-box.
-- **Babylon.js**: 3D-first (overkill). Trade-off: heavier, more complex API.
-- **Fabric.js**: Great for drawings. Trade-off: not optimized for many objects, heavier than Konva.
+- Use callback-based room join responses as authoritative snapshots, then apply incremental events.
 
-**Decision: Konva.js**
+Why:
 
-**Why:**
+- Reconnect/join needs a full canonical state before resuming realtime updates.
 
-- Abstraction over Canvas API (draw rectangles, circles, text directly)
-- Built-in transform controls (rotate, scale, drag)
-- Event system integrated (click, drag, touch)
-- WebGL backend available (auto-scales to 1000s of objects)
-- React integration straightforward via Konva React
-- Strong community, well-documented
+Evidence:
 
-**Tradeoffs:**
+- `room:join` callback returns participants, objects, and physics state in `server/src/socket/handlers/room.ts`
+- client hydration in `client/src/hooks/useRoom.ts`
 
-- Not as performant as raw Canvas at extreme scale (10k+ objects)
-- Requires mental model of Stage → Layer → Shape hierarchy
-- Bundle size ~150KB (acceptable given features)
+Tradeoff:
 
-**Implementation:**
+- Snapshot payload size grows with room complexity.
 
-```typescript
-<Konva.Stage width={w} height={h} ref={stageRef}>
-  <Konva.Layer>
-    {objects.map(obj => (
-      <Konva.Rect
-        x={obj.x}
-        y={obj.y}
-        width={obj.width}
-        height={obj.height}
-        onMouseDown={handleSelect}
-        onDragEnd={handleDrag}
-      />
-    ))}
-  </Konva.Layer>
-</Konva.Stage>
-```
+## 5. Append-Only Room Event Journal
 
----
+Decision:
 
-## Build Tool
+- Persist object/physics mutations to `RoomEvent` entries with room-scoped sequence numbers.
 
-### Decision: Vite (not Webpack or Parcel)
+Why:
 
-**Context:**  
-Development must be fast (HMR), production must be optimized. Evaluated: Webpack, Parcel, esbuild, Vite.
+- Provides deterministic replay input and an auditable mutation history.
 
-**Alternatives Considered:**
+Evidence:
 
-- **Webpack**: Industry standard, highly configurable. Trade-off: complex config, slow HMR, steep learning curve.
-- **Parcel**: Zero-config. Trade-off: less control, slower production builds than Vite.
-- **esbuild**: Super fast but build-only (not dev server).
+- schema model `RoomEvent` in `server/prisma/schema.prisma`
+- sequence allocation in `server/src/journal/roomEvents.ts`
+- journal writes from object and physics handlers
 
-**Decision: Vite**
+Tradeoff:
 
-**Why:**
+- Additional write overhead on mutating operations.
 
-- Extremely fast HMR (< 100ms for CSS, < 500ms for JS)
-- ES modules during development (true module boundaries)
-- esbuild-based for production (30% faster than Webpack)
-- Minimal config needed
-- First-class TypeScript support
-- CSS preprocessing built-in
+## 6. Deterministic Replay in Shared Runtime
 
-**Tradeoffs:**
+Decision:
 
-- Newer tool (less ecosystem plugins vs Webpack)
-- Some legacy dependencies don't work with ES modules
-- Production build verbosity sometimes confusing
+- Implement replay as pure event reduction in shared code, consumed by client UI.
 
----
+Why:
 
-## API Protocol
+- Deterministic reduction is easy to test and independent from network timing.
 
-### Decision: Socket.IO (not WebRTC or HTTP polling)
+Evidence:
 
-**Context:**  
-Real-time events (< 100ms latency) needed for multiplayer. Evaluated: Socket.IO, WebRTC, HTTP polling, Server-Sent Events.
+- reducer logic in `shared/src/replay/engine.ts`
+- deterministic tests in `shared/src/replay/engine.test.ts`
+- client replay panel in `client/src/components/Canvas.tsx`
 
-**Alternatives Considered:**
+Tradeoff:
 
-- **WebRTC Data Channel**: Peer-to-peer, lower latency. Trade-off: requires signaling server anyway, complex fallback logic, NAT traversal issues, no logging/debugging.
-- **HTTP Polling**: Works everywhere. Trade-off: high overhead, high latency, battery drain on mobile.
-- **Server-Sent Events**: Unidirectional (server → client only). Trade-off: requires separate channel for client → server.
-- **Raw WebSocket**: Lower level than Socket.IO. Trade-off: no reconnection logic, no message queuing, more boilerplate.
+- Replay currently depends on loading full ordered event history from server endpoint.
 
-**Decision: Socket.IO**
+## 7. Host-Authoritative Physics Controls
 
-**Why:**
+Decision:
 
-- Bi-directional real-time communication
-- Automatic reconnection with exponential backoff
-- Message queue during disconnection
-- Fallback to HTTP polling if WebSocket unavailable
-- Built-in room/namespace management
-- Easy acknowledgment pattern (`emitWithAck`)
-- Excellent TypeScript support via `@socket.io/typescript`
+- Keep physics simulation authority on room creator client and synchronize state through server.
 
-**Tradeoffs:**
+Why:
 
-- Small protocol overhead vs raw WebSocket (acceptable for LAN speeds)
-- Requires socket.io library on backend (but Express-friendly)
-- Namespace routing adds learning curve
+- Avoid divergent simulation results from multiple independent simulators.
+- Keeps server logic focused on synchronization and journaling.
 
-**Architecture Decision: Server-Managed Rooms**
+Evidence:
 
-```
-// Clients don't need to know about each other
-// All coordination via server
-socket.on('object:create', data => {
-  // Server broadcasts to room
-  io.to(roomId).emit('object:created', data);
-});
+- client simulation + physics control UI in `client/src/components/Canvas.tsx`
+- room physics state handler in `server/src/socket/handlers/physics.ts`
 
-// No peer-to-peer communication (simplifies NAT/firewall issues)
-```
+Tradeoff:
 
----
+- If host disconnects, simulation authority is interrupted until room state re-stabilizes.
 
-## Database
+## 8. Server-Wins Reconnect Strategy
 
-### Decision: PostgreSQL with Prisma (not MongoDB or Firebase)
+Decision:
 
-**Context:**  
-Need to store structured data (rooms, objects, events) with relationships and transactions. Evaluated: PostgreSQL, MongoDB, Firebase Firestore, SQLite.
+- On reconnect, hydrate from server snapshot first, then replay queued offline operations.
 
-**Alternatives Considered:**
+Why:
 
-- **MongoDB**: Schemaless flexibility. Trade-off: no transactions (pre-5.0), complex joins, eventual consistency issues.
-- **Firebase Firestore**: Managed, scales automatically. Trade-off: vendor lock-in, limited query flexibility, expensive at scale, harder to debug.
-- **SQLite**: Lightweight, works locally. Trade-off: not suitable for concurrent writes (lock contention), no replication.
+- Guarantees convergence to a canonical room state before local pending mutations are retried.
 
-**Decision: PostgreSQL + Prisma ORM**
+Evidence:
 
-**Why:**
+- offline queue implementation in `client/src/utils/offlineQueue.ts`
+- reconnect + rejoin flow in `client/src/hooks/useRoom.ts` and `client/src/components/Canvas.tsx`
 
-- ACID transactions (essential for event journal immutability)
-- Strong schema enforcement (prevents data corruption)
-- Efficient joins (e.g., get room + participants + objects in 1 query)
-- Full-text search, JSON columns (for event payloads)
-- Mature, battle-tested, free
-- Prisma adds type safety + migrations
+Tradeoff:
 
-**Tradeoffs:**
+- Local offline edits can be superseded by newer server state for the same object.
 
-- Requires database setup (vs Firebase's 0-ops)
-- Scaling requires careful sharding (not auto-scaling)
-- ORM adds small latency vs raw SQL
+## 9. Cloudinary for Media Storage
 
-**Data Model Rationale:**
+Decision:
 
-```sql
--- Immutable event journal (core pattern)
-CREATE TABLE RoomEvent (
-  id UUID PRIMARY KEY,
-  roomId UUID,
-  sequenceNumber INT,  -- Monotonic per room
-  eventType VARCHAR,
-  payload JSONB,       -- Full event data
-  UNIQUE(roomId, sequenceNumber)
-);
+- Upload media files to Cloudinary and persist only metadata/URLs in Postgres.
 
--- This enables:
--- 1. Complete audit trail
--- 2. Deterministic replay
--- 3. Horizontal scaling (events can be replicated)
--- 4. Point-in-time recovery
-```
+Why:
 
----
+- Keeps database focused on structured collaboration state.
+- Offloads media delivery/storage concerns.
 
-## ORM
+Evidence:
 
-### Decision: Prisma (not TypeORM or SQL.js)
+- upload route in `server/src/routes/media.ts`
+- metadata fields in `CanvasObject` model (`mediaUrl`, `mediaPublicId`, etc.)
 
-**Context:**  
-Need type-safe database queries without boilerplate. Evaluated: Prisma, TypeORM, Sequelize, Knex.
+Tradeoff:
 
-**Alternatives Considered:**
-
-- **TypeORM**: Decorators, more SQL control. Trade-off: more verbose, requires learning decorator syntax.
-- **Sequelize**: Mature, flexible. Trade-off: large API surface, migration system clunky.
-- **Raw SQL**: Maximum control. Trade-off: no type safety, error-prone.
-
-**Decision: Prisma**
-
-**Why:**
-
-- Schema-first design (schema.prisma file is source of truth)
-- Auto-generated, type-safe client
-- Excellent migrations system (`prisma migrate`)
-- Great error messages (designed for DX)
-- Built-in connection pooling
-- Works with existing databases
-
-**Tradeoffs:**
-
-- Less flexible for complex queries (use raw SQL when needed)
-- Generation step adds build complexity
-- Smaller ecosystem than TypeORM
-
----
-
-## Physics Engine
-
-### Decision: Matter.js (not Rapier or custom)
-
-**Context:**  
-Need realistic physics for throw mechanics and force fields. Evaluated: Matter.js, Rapier (via WebAssembly), custom physics.
-
-**Alternatives Considered:**
-
-- **Rapier**: Performance-optimized, written in Rust. Trade-off: WASM overhead, higher complexity, smaller community.
-- **Custom Physics**: Full control, minimal overhead. Trade-off: complex to debug, collision detection error-prone, huge time investment.
-- **Cannon-es**: 3D physics for 2D (overkill). Trade-off: heavier, more API surface.
-
-**Decision: Matter.js**
-
-**Why:**
-
-- Mature, battle-tested (used in many web games)
-- Clear separation of body, constraint, and engine
-- Easy to integrate with Konva (just need position/angle)
-- Excellent documentation and examples
-- Predictable behavior (important for multiplayer)
-- Pure JavaScript (no WASM complexity)
-
-**Tradeoffs:**
-
-- Not as performant as Rapier at high object counts
-- Uses more CPU than necessary for simple simulations
-- Host-authoritative model means client can't predict (minor latency impact)
-
-**Host-Authoritative Decision:**
-Rather than running physics on each client and reconciling, only the host runs Matter.js. This ensures:
-
-- Consistent physics state (no client disagreements)
-- Prevents cheating (client can't modify velocity locally)
-- Simpler reconciliation (just broadcast positions every N frames)
-
----
-
-## Event Sourcing & Replay
-
-### Decision: Immutable Event Journal (not state snapshots)
-
-**Context:**  
-Need to support session replay and audit trails. Evaluated: event sourcing, periodic snapshots, delta compression.
-
-**Alternatives Considered:**
-
-- **Periodic Snapshots**: Faster replay, smaller storage. Trade-off: replay from snapshot loses ability to jump to arbitrary point, harder to merge clients.
-- **Delta Compression**: Store only changes. Trade-off: reconstruction slower, complex conflict resolution.
-- **Time-Series DB (InfluxDB)**: Built for this pattern. Trade-off: vendor lock-in, overkill for this use case.
-
-**Decision: Event Sourcing**
-
-**Why:**
-
-- Complete audit trail (regulatory/debugging)
-- Deterministic replay (same events → same state)
-- Can jump to any point in time
-- Easy to merge changes from offline clients
-- Scales horizontally (events can be replicated to other servers)
-- Enables temporal queries ("show me state at 3:45 PM")
-
-**Tradeoffs:**
-
-- More storage than snapshots (mitigated by compression)
-- Replay performance slower (acceptable for replay-on-demand, not real-time streaming)
-- Requires careful handling of event schema versioning
-
-**Snapshot Hydration Optimization:**
-To speed up new joins, we still generate snapshots periodically:
-
-```
-[Event 0-99] → Snapshot at event 100 (stored)
-[Event 100-199] → Snapshot at event 200 (stored)
-
-When replaying: load snapshot 100 + events 100-150 (faster than events 0-150)
-```
-
----
-
-## Offline Queue & Conflict Resolution
-
-### Decision: Server-Wins (not Operational Transformation)
-
-**Context:**  
-When offline, client can't reach server. On reconnect, need to merge local + remote changes.
-
-**Alternatives Considered:**
-
-- **Operational Transformation (OT)**: Mathematically proven merge algorithm. Trade-off: complex to implement, bug-prone, slow.
-- **Conflict-Free Replicated Data Types (CRDTs)**: Eventual consistency via math. Trade-off: overkill for centralized architecture, harder to reason about.
-- **Last-Write-Wins**: Simple. Trade-off: data loss (user loses work).
-- **Merge UI**: Ask user to resolve. Trade-off: poor UX, requires UI for every conflict.
-
-**Decision: Server-Wins (simplified)**
-
-**Why:**
-
-- Simple to implement and reason about
-- No data corruption (server is authoritative)
-- Acceptable for this use case (not a collaborative document editor)
-- Offline queue still preserves user intent (new operations succeed)
-
-**How it Works:**
-
-```
-1. Client goes offline
-   - Queue: [create rect, update circle, delete triangle]
-
-2. Server state changes (another client modified)
-   - Room now has different objects
-
-3. Client reconnects
-   - Server sends snapshot (current state)
-   - Client applies snapshot
-   - Client flushes queue (new operations)
-
-4. Result: User's new actions preserved, but edits to existing objects lost
-
-For many tasks, this is acceptable:
-- Creating new objects: succeeds ✅
-- Editing existing object: lost ❌
-- Deleting object: lost (but queued, might fail)
-```
-
-**Better UX Strategy** (not implemented):
-
-```typescript
-// Instead of silently losing edits, notify user
-on('reconnect', () => {
-  const snapshot = getSnapshot();
-  const conflicts = detectConflicts(localQueue, snapshot);
-
-  if (conflicts.length > 0) {
-    showNotification(`${conflicts.length} changes were synced. Others made edits too.`);
-  }
-});
-```
-
----
-
-## Security
-
-### Decision: Guest Sessions Without Authentication
-
-**Context:**  
-Hackathon project prioritizes ease of use. Evaluated: OAuth, JWT tokens, simple guest sessions.
-
-**Alternatives Considered:**
-
-- **OAuth (Google/GitHub)**: Proven, secure. Trade-off: setup complexity, dependency on external provider.
-- **Email + Password**: Traditional. Trade-off: storage/hashing burden, phishing risk, UX friction.
-- **Anonymous Sharing**: Any link, anyone can edit. Trade-off: security vulnerability.
-
-**Decision: Guest Sessions**
-
-**Why:**
-
-- Minimal friction (user just picks a name)
-- Sufficient for hackathon (not handling sensitive data)
-- Easy to replace later with real auth (just wrap session validation)
-
-**Implementation:**
-
-```typescript
-// No passwords, just a temporary session token
-const token = generateSecureToken();
-const session = db.guestSession.create({
-  token: sha256(token),  // Hash before storage
-  expiresAt: now + 30days,
-  userId: generateId()
-});
-
-// Client stores token in localStorage
-// Each request includes token in header
-// Server validates: token is not expired, exists, not revoked
-```
-
-**Security Assumptions:**
-
-- Rooms are "secret" via short codes (not in public URL)
-- Sessions expire after 30 days
-- No sensitive PII stored
-- Rate limiting on room creation prevents spam
-
-**Future Enhancement:**
-
-```typescript
-// When ready, add proper auth:
-const authenticatedSession = db.session.create({
-  userId: user.id,
-  token: generateSecureToken(),
-  expiresAt: now + 24hours
-});
-// No code changes needed in Canvas.tsx (session validation is in middleware)
-```
-
----
-
-## Testing Strategy
-
-### Decision: Snapshot + Replay Tests (not exhaustive unit tests)
-
-**Context:**  
-Need high confidence in correctness without excessive test boilerplate.
-
-**Alternatives Considered:**
-
-- **100% Unit Test Coverage**: Maximum confidence. Trade-off: huge maintenance burden, brittle tests.
-- **E2E Tests Only**: Realistic but slow.
-- **Focused Tests**: Test critical paths only. Trade-off: some bugs escape.
-
-**Decision: Focused Snapshot + Replay Tests**
-
-**Why:**
-
-- Deterministic replay is _inherently testable_ (same input → same output)
-- Fewer tests needed because logic is centralized (no branching paths)
-- Tests double as documentation
-
-**What We Test:**
-
-```typescript
-// Replay correctness (most important)
-test('replay: identical state after 100 operations', () => {
-  const events = generateRandomEvents(100);
-
-  // Replay twice
-  const state1 = reconstructState(events);
-  const state2 = reconstructState(events);
-
-  // Should be byte-identical
-  expect(state1).toEqual(state2);
-});
-
-// Room event handling
-test('room:create and room:join', async () => {
-  const code = await createRoom();
-  expect(code).toHaveLength(8);
-
-  const snapshot = await joinRoom(code);
-  expect(snapshot.roomId).toBeDefined();
-});
-
-// Physics simulation (sample, not exhaustive)
-test('throw physics: velocity decreases over time', () => {
-  const body = Bodies.rectangle(0, 0, 20, 20);
-  Body.setVelocity(body, { x: 100, y: 0 });
-
-  Engine.update(engine, 1000 / 60);
-  const vx1 = body.velocity.x;
-
-  Engine.update(engine, 1000 / 60);
-  const vx2 = body.velocity.x;
-
-  expect(vx2).toBeLessThan(vx1); // Friction applied
-});
-```
-
----
-
-## Performance Optimizations
-
-### 1. Viewport-Based Rendering
-
-**Decision:** Only render objects near camera view.
-
-```typescript
-const visible = objects.filter((obj) => {
-  const dist = distance(obj.pos, camera.pos);
-  return dist < VIEWPORT_DISTANCE;
-});
-
-// Render only visible subset
-renderObjects(visible);
-```
-
-**Benefit:** 100+ objects on canvas, but only 20-30 rendered at any time.
-
-### 2. Frame Rate Syncing
-
-**Decision:** Sync physics updates every 10th render frame (6 updates/sec instead of 60).
-
-```typescript
-if (frameCount % 10 === 0) {
-  emitPhysicsUpdate({...});
-}
-```
-
-**Benefit:** Reduces network traffic 90%, imperceptible to users (network latency dominates).
-
-### 3. Batch Event Journaling
-
-**Decision:** Batch writes to DB (insert 10 events per transaction vs 1).
-
-```typescript
-// Client: queue events locally
-eventQueue.push(event);
-
-// Every 100ms or 10 events
-if (eventQueue.length >= BATCH_SIZE || timeElapsed > BATCH_INTERVAL) {
-  db.roomEvent.createMany(eventQueue);
-  eventQueue.clear();
-}
-```
-
-**Benefit:** 90% reduction in DB round-trips.
-
-### 4. Konva Layer Optimization
-
-**Decision:** Use layer caching for static groups.
-
-```typescript
-<Konva.Layer ref={layerRef}>
-  {objects.map(obj => <Shape key={obj.id} {...obj} />)}
-</Konva.Layer>
-
-// After all shapes rendered
-layerRef.current.batchDraw();  // Single composite render
-```
-
-**Benefit:** Reduces browser paint time.
-
----
-
-## Scalability Considerations
-
-### Current Architecture Limits
-
-- **Single Room**: 2-3 concurrent clients (no optimization yet)
-- **Max Objects**: 500 (performance degrades)
-- **Max Sessions**: 100 (before server memory pressure)
-
-### Scaling Roadmap
-
-**Phase 1**: Horizontal server scaling
-
-```
-Load Balancer
-├─ Server 1 (Room A, B)
-├─ Server 2 (Room C, D)
-└─ Redis (Socket.IO adapter, session store)
-```
-
-**Phase 2**: Database scaling
-
-```
-Primary: Postgres (writes)
-└─ Replicas: Postgres (read queries)
-```
-
-**Phase 3**: Event archival
-
-```
-Hot events: PostgreSQL (recent)
-Cold events: S3/Archive (older than 7 days)
-```
-
-See [FUTURE_WORK.md](FUTURE_WORK.md) for detailed scaling plan.
-
----
-
-## Summary Table
-
-| Decision       | Why                                 | Tradeoff                       |
-| -------------- | ----------------------------------- | ------------------------------ |
-| React          | Ecosystem, TypeScript, community    | Larger bundle                  |
-| Zustand        | Minimal boilerplate                 | Less ecosystem than Redux      |
-| Konva          | Transform controls, event system    | Not ideal for 10k+ objects     |
-| Vite           | Fast HMR, optimized builds          | Newer tool                     |
-| Socket.IO      | Bi-directional, reconnection, rooms | Small overhead vs raw WS       |
-| PostgreSQL     | ACID, joins, transactions           | Requires setup vs Firebase     |
-| Prisma         | Type-safe, migrations               | Less control than raw SQL      |
-| Matter.js      | Mature, clear API                   | Not as performant as Rapier    |
-| Event Sourcing | Audit trail, replay, merge          | More storage                   |
-| Server-Wins    | Simple, no data corruption          | User loses offline edits       |
-| Guest Sessions | Minimal friction                    | Limited security (intentional) |
-| Snapshot Tests | Fewer tests needed, focused         | Doesn't test all paths         |
-
-**Philosophy:**  
-_Choose proven, well-documented tools that enable correctness. Avoid premature optimization. Optimize only when measurements show the bottleneck._
+- Media upload availability depends on Cloudinary configuration and external service health.

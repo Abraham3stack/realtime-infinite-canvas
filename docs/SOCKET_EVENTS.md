@@ -1,781 +1,258 @@
-# Socket.IO Event Contract
+# Socket.IO Events
 
-This document defines the Socket.IO API contract between client and server.
+This document describes the Socket.IO events that are implemented in the current codebase.
 
-Contract rules:
+## Connection and Basic Diagnostics
 
-- All payloads are validated with Zod on server entry.
-- Mutating events include operationId for idempotency.
-- Mutating events include roomId and clientTs.
-- Server responses include serverTs and sequence/version where applicable.
-- Unknown or invalid payloads must return structured errors.
+### `server:hello` (server -> client)
 
-## Error Object Format
+Emitted when a connection is established.
 
-All error responses should follow a common shape:
+Payload:
 
-- code: machine-readable error code
-- message: human-readable message
-- details: optional validation or domain details
-- requestId: optional trace ID
+- `socketId`
+- `serverTs`
+- `message`
 
----
+### `ping` / `pong`
 
-## Event: room:create
+- client emits `ping`
+- server responds with `pong` and `serverTs`
 
-### Direction
+## Room Lifecycle
 
-Client -> Server
+### `room:create` (client -> server, callback response)
 
-### Payload
+Request payload:
 
-- displayName: string
+- optional `displayName` field (used as room title in current handler)
 
-### Validation
+Callback response on success:
 
-- displayName required
-- displayName length within accepted range
-- displayName sanitized for disallowed content
+- `roomId`
+- `shareCode` (generated 6-char code)
+- `createdBySessionId`
+- `session` metadata
+- `participant` summary
+- `initialState` (room + participant list)
+- `physicsState`
 
-### Expected Response
+Error response fields:
 
-Server -> Client: room:created
+- `code`
+- `message`
 
-- roomId
-- shareCode
-- session
-- participant
-- initialState
+### `room:join` (client -> server, callback response)
 
-### Error Conditions
+Request payload:
 
-- INVALID_PAYLOAD
-- SESSION_CREATE_FAILED
-- ROOM_CREATE_FAILED
+- either `roomId` or `shareCode`
 
----
+Callback response on success:
 
-## Event: room:join
+- `roomId`
+- `title`
+- `createdBySessionId`
+- `participants`
+- `canvasObjects`
+- `physicsState`
 
-### Direction
+Error response fields:
 
-Client -> Server
+- `code`
+- `message`
 
-### Payload
+### `room:leave` (client -> server, callback response)
 
-- roomId or shareCode
-- displayName (required if no existing guest session)
-- sessionToken (optional if already issued)
+Request payload:
 
-### Validation
+- currently ignored by server handler (client sends empty object)
 
-- room identifier required
-- session token validity checked if provided
-- displayName required for new session
+Callback response:
 
-### Expected Response
+- `{ success: true }` on successful leave
+- `{ success: false }` otherwise
 
-Server -> Client: room:stateSnapshot
+### `room:userJoined` (server -> room)
 
-- room metadata
-- participants
-- canvasObjects
-- latestServerSeq
+Broadcast to other participants when a member joins.
 
-Server -> Room: room:userJoined
+Payload:
 
-- participant summary
+- `participant`
+- `serverTs`
 
-### Error Conditions
+### `room:userLeft` (server -> room)
 
-- INVALID_PAYLOAD
-- ROOM_NOT_FOUND
-- SESSION_INVALID
-- ROOM_JOIN_DENIED
+Broadcast when a member leaves or disconnects.
 
----
+Payload:
 
-## Event: room:leave
+- `participantId`
+- `roomId`
+- `serverTs`
 
-### Direction
+## Object Synchronization
 
-Client -> Server
+### `object:create` (client -> server)
 
-### Payload
+Payload:
 
-- roomId
+- `operationId`
+- `roomId`
+- `object`
 
-### Validation
+On success server broadcasts `object:created`.
 
-- roomId required
-- caller must be current participant
+### `object:created` (server -> room)
 
-### Expected Response
+Payload:
 
-Server -> Room: room:userLeft
+- `operationId`
+- `object` (canonical server-mapped object)
+- `serverTs`
 
-- participantId
-- roomId
+### `object:update` (client -> server)
 
-Server -> Client: sync:ack
+Payload:
 
-- event: room:leave
-- success: true
+- `operationId`
+- `roomId`
+- `objectId`
+- `updates`
 
-### Error Conditions
+On success server broadcasts `object:updated`.
 
-- INVALID_PAYLOAD
-- ROOM_NOT_FOUND
-- PARTICIPANT_NOT_FOUND
+### `object:updated` (server -> room)
 
----
+Payload:
 
-## Event: presence:update
+- `operationId`
+- `objectId`
+- `updates`
+- `serverTs`
 
-### Direction
+### `object:delete` (client -> server)
 
-Client -> Server
+Payload:
 
-### Payload
+- `operationId`
+- `roomId`
+- `objectId`
 
-- roomId
-- viewport: x, y, zoom
-- status: active or idle
+On success server broadcasts `object:deleted`.
 
-### Validation
+### `object:deleted` (server -> room)
 
-- roomId required
-- viewport numeric fields required and finite
-- status must be accepted enum value
+Payload:
 
-### Expected Response
+- `operationId`
+- `objectId`
+- `serverTs`
 
-Server -> Room: presence:updated
+## Presence Synchronization
 
-- participantId
-- viewport
-- status
-- serverTs
+### `presence:update` (client -> server)
 
-### Error Conditions
+Payload:
 
-- INVALID_PAYLOAD
-- ROOM_NOT_FOUND
-- PARTICIPANT_NOT_FOUND
+- `roomId`
+- `viewport`:
+  - `x`
+  - `y`
+  - `zoom`
+  - optional `width`
+  - optional `height`
+- `status`: `active` or `idle`
 
----
+### `presence:updated` (server -> room)
 
-## Event: cursor:update (optional MVP plus for collaborator awareness)
+Payload:
 
-### Direction
+- `participantId`
+- `sessionId`
+- `displayName`
+- `roomId`
+- `viewport`
+- `status`
+- `serverTs`
 
-Client -> Server
+## Physics State Synchronization
 
-### Payload
+### `physics:update-state` (client -> server)
 
-- roomId
-- cursor: x, y
+Payload:
 
-### Validation
+- `operationId`
+- `roomId`
+- `patch` with any of:
+  - `enabled`
+  - `simulationRunning`
+  - `gravityY` (clamped 0..10)
+  - `restitution` (clamped 0..1.2)
+  - `frictionAir` (clamped 0..0.2)
 
-- roomId required
-- cursor coordinates required and finite
-- event rate-limited per participant
+### `physics:set-static` (client -> server)
 
-### Expected Response
+Payload:
 
-Server -> Room: cursor:updated
+- `operationId`
+- `roomId`
+- `objectId`
+- `isStatic`
 
-- participantId
-- cursor
-- serverTs
+### `physics:reset` (client -> server)
 
-### Error Conditions
+Payload:
 
-- INVALID_PAYLOAD
-- RATE_LIMITED
-- ROOM_NOT_FOUND
+- `operationId`
+- `roomId`
 
----
+### `physics:state` (server -> room)
 
-## Event: object:create
+Broadcast after each accepted physics mutation.
 
-### Direction
+Payload:
 
-Client -> Server
+- `roomId`
+- `state`:
+  - `enabled`
+  - `simulationRunning`
+  - `gravityY`
+  - `restitution`
+  - `frictionAir`
+  - `staticObjectIds`
+  - `resetNonce`
+  - `revision`
+- `serverTs`
 
-### Payload
+## Replay Event Listing
 
-- operationId
-- roomId
-- clientTs
-- object: id, type, payload, transform, style, zIndex
+### `room:events:list` (client -> server, callback response)
 
-### Validation
+Request payload:
 
-- operationId unique for participant session scope
-- roomId required
-- object type allowed enum: text, shape, sticky, image, audio, video
-- payload schema must match object type
+- optional `roomId` (defaults to authenticated socket room)
+- optional `afterSequenceNumber`
 
-### Expected Response
+Success callback response:
 
-Server -> Room: object:created
+- `roomId`
+- `events` (ordered by `sequenceNumber` ascending)
 
-- operationId
-- object (canonical)
-- version
-- serverSeq
-- serverTs
+Error callback response includes:
 
-Server -> Client: sync:ack
+- `code`
+- `message`
+- `roomId`
+- `events: []`
 
-- operationId
-- success: true
+## Not Implemented in Current Server Handlers
 
-### Error Conditions
+The following are not implemented as active server socket handlers in this repository:
 
-- INVALID_PAYLOAD
-- DUPLICATE_OPERATION
-- ROOM_NOT_FOUND
-- OBJECT_TYPE_INVALID
-- OBJECT_VALIDATION_FAILED
-
----
-
-## Event: object:update
-
-### Direction
-
-Client -> Server
-
-### Payload
-
-- operationId
-- roomId
-- clientTs
-- objectId
-- patch: partial object update
-- baseVersion (optional)
-
-### Validation
-
-- operationId required
-- objectId required
-- patch must only include allowed mutable fields
-- patch payload must remain valid for object type
-
-### Expected Response
-
-Server -> Room: object:updated
-
-- operationId
-- objectId
-- patchApplied
-- newVersion
-- serverSeq
-- serverTs
-
-Server -> Client: sync:ack
-
-- operationId
-- success: true
-
-### Error Conditions
-
-- INVALID_PAYLOAD
-- ROOM_NOT_FOUND
-- OBJECT_NOT_FOUND
-- VERSION_CONFLICT
-- OBJECT_VALIDATION_FAILED
-
----
-
-## Event: object:delete
-
-### Direction
-
-Client -> Server
-
-### Payload
-
-- operationId
-- roomId
-- clientTs
-- objectId
-
-### Validation
-
-- operationId required
-- objectId required
-- object must exist in target room
-
-### Expected Response
-
-Server -> Room: object:deleted
-
-- operationId
-- objectId
-- serverSeq
-- serverTs
-
-Server -> Client: sync:ack
-
-- operationId
-- success: true
-
-### Error Conditions
-
-- INVALID_PAYLOAD
-- ROOM_NOT_FOUND
-- OBJECT_NOT_FOUND
-
----
-
-## Event: objects:bulkSyncRequest
-
-### Direction
-
-Client -> Server
-
-### Payload
-
-- roomId
-- lastKnownServerSeq
-
-### Validation
-
-- roomId required
-- lastKnownServerSeq required and non-negative
-
-### Expected Response
-
-Server -> Client: room:stateSnapshot or sync:deltaBatch
-
-- full snapshot if gap too large
-- delta batch if gap is recoverable
-
-### Error Conditions
-
-- INVALID_PAYLOAD
-- ROOM_NOT_FOUND
-- SEQ_OUT_OF_RANGE
-
----
-
-## Event: media:register
-
-### Direction
-
-Client -> Server
-
-### Payload
-
-- operationId
-- roomId
-- clientTs
-- objectId
-- mediaType: image, audio, or video
-- mediaUrl
-- mediaPublicId
-- mimeType
-- sizeBytes
-- durationMs (required for audio/video when known)
-
-### Validation
-
-- mediaUrl required and valid URL
-- mediaType allowed enum
-- required metadata present per mediaType
-
-### Expected Response
-
-Server -> Client: sync:ack
-
-- operationId
-- success: true
-
-Server -> Room: object:updated or object:created
-
-- canonical media metadata included
-
-### Error Conditions
-
-- INVALID_PAYLOAD
-- MEDIA_VALIDATION_FAILED
-- OBJECT_NOT_FOUND
-- ROOM_NOT_FOUND
-
----
-
-## Event: physics:applyImpulse (creative feature)
-
-### Direction
-
-Client -> Server
-
-### Payload
-
-- operationId
-- roomId
-- clientTs
-- objectId
-- impulse: x, y
-
-### Validation
-
-- object type must support physics
-- impulse values finite and within max range
-
-### Expected Response
-
-Server -> Room: object:updated or physics:state
-
-- updated transform/velocity state
-- serverSeq
-- serverTs
-
-### Error Conditions
-
-- INVALID_PAYLOAD
-- OBJECT_NOT_FOUND
-- PHYSICS_NOT_ENABLED
-- OBJECT_NOT_PHYSICS_ELIGIBLE
-
----
-
-## Event: miniMap:viewportUpdate (creative feature)
-
-### Direction
-
-Client -> Server
-
-### Payload
-
-- roomId
-- viewport: x, y, zoom, width, height
-
-### Validation
-
-- required viewport fields are finite numbers
-- event is throttled
-
-### Expected Response
-
-Server -> Room: miniMap:radarUpdate
-
-- participant positions/viewport outlines
-- serverTs
-
-### Error Conditions
-
-- INVALID_PAYLOAD
-- RATE_LIMITED
-- ROOM_NOT_FOUND
-
----
-
-## Event: room:created
-
-### Direction
-
-Server -> Client
-
-### Payload
-
-- roomId
-- shareCode
-- session
-- participant
-- initialState
-
-### Validation
-
-- Must include canonical room and session identifiers
-
-### Expected Response
-
-Client stores session and transitions to active room state.
-
-### Error Conditions
-
-- CLIENT_STATE_REJECTED (client-side handling)
-
----
-
-## Event: room:stateSnapshot
-
-### Direction
-
-Server -> Client
-
-### Payload
-
-- room
-- participants
-- canvasObjects
-- latestServerSeq
-
-### Validation
-
-- latestServerSeq required
-- object payloads must match defined object types
-
-### Expected Response
-
-Client hydrates state and resumes incremental sync.
-
-### Error Conditions
-
-- SNAPSHOT_PARSE_FAILED (client-side)
-
----
-
-## Event: room:userJoined
-
-### Direction
-
-Server -> Room
-
-### Payload
-
-- participant summary
-- serverTs
-
-### Validation
-
-- participant identifiers required
-
-### Expected Response
-
-Clients update presence list.
-
-### Error Conditions
-
-- CLIENT_STATE_UPDATE_FAILED (client-side)
-
----
-
-## Event: room:userLeft
-
-### Direction
-
-Server -> Room
-
-### Payload
-
-- participantId
-- roomId
-- serverTs
-
-### Validation
-
-- participantId required
-
-### Expected Response
-
-Clients remove or mark participant inactive.
-
-### Error Conditions
-
-- CLIENT_STATE_UPDATE_FAILED (client-side)
-
----
-
-## Event: object:created
-
-### Direction
-
-Server -> Room
-
-### Payload
-
-- operationId
-- object canonical payload
-- version
-- serverSeq
-- serverTs
-
-### Validation
-
-- canonical object includes required fields for object type
-
-### Expected Response
-
-Clients add object and acknowledge local reconciliation.
-
-### Error Conditions
-
-- CLIENT_OBJECT_APPLY_FAILED (client-side)
-
----
-
-## Event: object:updated
-
-### Direction
-
-Server -> Room
-
-### Payload
-
-- operationId
-- objectId
-- patchApplied or canonical object
-- newVersion
-- serverSeq
-- serverTs
-
-### Validation
-
-- objectId required
-- version increment required
-
-### Expected Response
-
-Clients apply patch and resolve optimistic state.
-
-### Error Conditions
-
-- CLIENT_OBJECT_APPLY_FAILED (client-side)
-
----
-
-## Event: object:deleted
-
-### Direction
-
-Server -> Room
-
-### Payload
-
-- operationId
-- objectId
-- serverSeq
-- serverTs
-
-### Validation
-
-- objectId required
-
-### Expected Response
-
-Clients remove object from local scene.
-
-### Error Conditions
-
-- CLIENT_OBJECT_APPLY_FAILED (client-side)
-
----
-
-## Event: presence:updated
-
-### Direction
-
-Server -> Room
-
-### Payload
-
-- participantId
-- viewport
-- status
-- serverTs
-
-### Validation
-
-- participantId and viewport required
-
-### Expected Response
-
-Clients update participant presence and optional radar markers.
-
-### Error Conditions
-
-- CLIENT_PRESENCE_APPLY_FAILED (client-side)
-
----
-
-## Event: cursor:updated
-
-### Direction
-
-Server -> Room
-
-### Payload
-
-- participantId
-- cursor
-- serverTs
-
-### Validation
-
-- participantId required
-- cursor finite coordinates required
-
-### Expected Response
-
-Clients render collaborator cursor.
-
-### Error Conditions
-
-- CLIENT_CURSOR_APPLY_FAILED (client-side)
-
----
-
-## Event: sync:ack
-
-### Direction
-
-Server -> Client
-
-### Payload
-
-- operationId or event name
-- success
-- serverSeq (optional)
-- serverTs
-
-### Validation
-
-- success boolean required
-
-### Expected Response
-
-Client clears pending state for acknowledged operation.
-
-### Error Conditions
-
-- ACK_MISMATCH (client-side)
-
----
-
-## Event: sync:error
-
-### Direction
-
-Server -> Client
-
-### Payload
-
-- operationId (optional)
-- error object
-- recoverable boolean
-
-### Validation
-
-- error object required
-
-### Expected Response
-
-Client shows error, retries if recoverable, or requests resync.
-
-### Error Conditions
-
-- Not applicable (this event is the error response)
-
----
-
-## Contract Governance
-
-- Any event contract change must update this document before implementation.
-- Event name changes are breaking changes and require synchronized client and server updates.
-- New event fields must be additive and backward-compatible unless a full version bump is documented.
+- `cursor:update` / `cursor:updated`
+- `objects:bulkSyncRequest` / delta batch protocol
+- `media:register`
+- `physics:applyImpulse`
+- `miniMap:viewportUpdate`
